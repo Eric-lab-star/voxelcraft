@@ -1,0 +1,19 @@
+[package]
+name = "voxelcraft"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = "0.19"
+noise = "0.9.0"
+# Same winit version Bevy 0.19 uses, so the window handle types match and we
+# can set a custom window icon.
+winit = { version = "0.30", default-features = false }
+
+# Compile our code with light optimization, and dependencies fully optimized.
+# This keeps Bevy fast to run while keeping our own rebuilds quick.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
