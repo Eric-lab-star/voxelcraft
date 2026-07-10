@@ -1,4 +1,7 @@
 /target
 
+# Packaged distribution bundles
+/dist
+
 # World save slots
 world*.sav

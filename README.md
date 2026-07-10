@@ -59,6 +59,28 @@ cargo run --release  # smoother framerate
 The first build compiles Bevy and its dependencies, so it takes a few minutes;
 subsequent builds are fast.
 
+## Windows bundle (distribution)
+
+To produce a shareable Windows build, run the packaging script from the project
+root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File package-windows.ps1
+```
+
+It builds the release binary, stages a runnable folder, and zips it:
+
+- `dist/voxelcraft-windows/` — the runnable folder
+- `dist/voxelcraft-windows-x64.zip` — zipped for sharing (~27 MB)
+
+voxelcraft has **no external asset files** (every texture, the cloud layer and
+the window icon are generated in code), so the bundle is just `voxelcraft.exe`
+plus a short `PLAY-ME.txt` and this README — no installer, no data folder.
+
+To play, unzip and double-click `voxelcraft.exe`. Worlds are saved next to the
+`.exe` as `world_1.sav`..`world_3.sav`. Requires a 64-bit Windows PC with a GPU
+that supports Vulkan or DirectX 12 (any reasonably modern machine).
+
 ## Project structure
 
 All logic lives in `src/`, one module per concern:
