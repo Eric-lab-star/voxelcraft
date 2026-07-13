@@ -20,6 +20,7 @@ mod particles;
 mod player;
 mod save;
 mod texture;
+mod voxel_material;
 mod water;
 mod world;
 
@@ -41,6 +42,8 @@ fn main() {
                 // Nearest-neighbour sampling keeps the pixel-art textures crisp.
                 .set(ImagePlugin::default_nearest()),
         )
+        // Registers the greedy-mesh terrain material + its embedded shader.
+        .add_plugins(voxel_material::VoxelMaterialPlugin)
         .insert_resource(ClearColor(Color::srgb(0.53, 0.74, 0.92)))
         // Lower ambient so the sun and the per-face shading create real
         // contrast between terrain layers instead of a flat, evenly-lit look.

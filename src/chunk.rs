@@ -6,7 +6,9 @@ use std::collections::{HashMap, HashSet};
 use crate::mesh::{build_chunk_meshes, ChunkMeshes};
 use crate::player::Player;
 use crate::texture::BlockAtlas;
+use crate::voxel_material::{TerrainMaterial, VoxelExtension};
 use crate::world::{World, CHUNK_SIZE, WORLD_X, WORLD_Z};
+use bevy::pbr::Material;
 use bevy::prelude::*;
 
 /// The two render entities for a chunk (either may be absent).
@@ -24,10 +26,11 @@ pub struct ChunkEntities(pub HashMap<(i32, i32), ChunkPair>);
 #[derive(Resource, Default)]
 pub struct DirtyChunks(pub HashSet<(i32, i32)>);
 
-/// The opaque terrain material and the translucent water material.
+/// The opaque terrain material (greedy-meshed, atlas-tiled) and the translucent
+/// water material.
 #[derive(Resource)]
 pub struct ChunkMaterials {
-    pub terrain: Handle<StandardMaterial>,
+    pub terrain: Handle<TerrainMaterial>,
     pub water: Handle<StandardMaterial>,
 }
 
@@ -40,21 +43,25 @@ pub fn setup_world(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut terrain_materials: ResMut<Assets<TerrainMaterial>>,
     atlas: Res<BlockAtlas>,
 ) {
     // Resume slot 1 if it exists, otherwise generate a fresh one.
     let world =
         World::load(&crate::save::slot_path(1)).unwrap_or_else(|| World::generate(1337));
 
-    let terrain = materials.add(StandardMaterial {
-        base_color: Color::WHITE,
-        base_color_texture: Some(atlas.image.clone()),
-        perceptual_roughness: 0.9,
-        // Voxel faces are single-sided in our mesh; render both sides so we
-        // never have to worry about winding order.
-        cull_mode: None,
-        double_sided: true,
-        ..default()
+    let terrain = terrain_materials.add(TerrainMaterial {
+        base: StandardMaterial {
+            base_color: Color::WHITE,
+            base_color_texture: Some(atlas.image.clone()),
+            perceptual_roughness: 0.9,
+            // Voxel faces are single-sided in our mesh; render both sides so we
+            // never have to worry about winding order.
+            cull_mode: None,
+            double_sided: true,
+            ..default()
+        },
+        extension: VoxelExtension::new(),
     });
     let water = materials.add(StandardMaterial {
         // Very saturated blue. A blue emissive lift keeps it vivid and bright
@@ -182,11 +189,11 @@ pub fn rebuild_dirty_chunks(
 }
 
 /// Reconcile one entity slot with a freshly-built (or now-empty) mesh.
-fn update_slot(
+fn update_slot<M: Material>(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     mesh_query: &Query<&Mesh3d>,
-    material: &Handle<StandardMaterial>,
+    material: &Handle<M>,
     slot: &mut Option<Entity>,
     new_mesh: Option<Mesh>,
 ) {
