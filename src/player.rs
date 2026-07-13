@@ -42,6 +42,21 @@ impl Player {
         }
     }
 
+    /// The eye (camera) position: near the top of the collision box.
+    pub fn eye(&self) -> Vec3 {
+        self.center + Vec3::new(0.0, EYE_OFFSET, 0.0)
+    }
+
+    /// The look rotation built from yaw (around Y) then pitch (around X).
+    pub fn look_rotation(&self) -> Quat {
+        Quat::from_axis_angle(Vec3::Y, self.yaw) * Quat::from_axis_angle(Vec3::X, self.pitch)
+    }
+
+    /// Unit vector the player is looking along.
+    pub fn forward(&self) -> Vec3 {
+        self.look_rotation() * Vec3::NEG_Z
+    }
+
     /// Does the player's collision box overlap the unit cell at `block`?
     /// Used to stop the player placing a block inside themselves.
     pub fn intersects_block(&self, block: IVec3) -> bool {
@@ -94,6 +109,7 @@ pub fn player_look(
     mouse: Res<AccumulatedMouseMotion>,
     cursors: Query<&CursorOptions, With<PrimaryWindow>>,
     mut query: Query<&mut Player>,
+    mut warmup: Local<u32>,
 ) {
     let grabbed = cursors
         .single()
@@ -104,6 +120,14 @@ pub fn player_look(
     }
     let delta = mouse.delta;
     if delta == Vec2::ZERO {
+        return;
+    }
+    // Ignore the large spurious delta produced when the cursor is first grabbed
+    // and recentred (which can happen a few frames in, once the window gains
+    // focus), so the view doesn't spin off on startup. A brief warm-up also
+    // swallows the very first grabbed frames.
+    if *warmup < 3 || delta.length() > 120.0 {
+        *warmup += 1;
         return;
     }
     let sensitivity = 0.0025;

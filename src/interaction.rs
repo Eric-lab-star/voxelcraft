@@ -92,7 +92,7 @@ fn boundary_dist(origin: f32, dir: f32) -> f32 {
 
 pub fn edit_blocks(
     buttons: Res<ButtonInput<MouseButton>>,
-    camera: Query<(&Transform, &Player)>,
+    player_q: Query<&Player>,
     hotbar: Res<Hotbar>,
     particles: Res<ParticleAssets>,
     mut rng: Local<u32>,
@@ -107,11 +107,11 @@ pub fn edit_blocks(
         return;
     }
 
-    let Ok((transform, player)) = camera.single() else {
+    let Ok(player) = player_q.single() else {
         return;
     };
 
-    let Some(hit) = raycast(&world, transform.translation, *transform.forward()) else {
+    let Some(hit) = raycast(&world, player.eye(), player.forward()) else {
         return;
     };
 
@@ -141,13 +141,13 @@ pub fn edit_blocks(
 /// Draw a wireframe box around the block the player is aiming at.
 pub fn highlight_target(
     world: Res<World>,
-    camera: Query<&Transform, With<Player>>,
+    player_q: Query<&Player>,
     mut gizmos: Gizmos,
 ) {
-    let Ok(transform) = camera.single() else {
+    let Ok(player) = player_q.single() else {
         return;
     };
-    if let Some(hit) = raycast(&world, transform.translation, *transform.forward()) {
+    if let Some(hit) = raycast(&world, player.eye(), player.forward()) {
         let center = hit.block.as_vec3() + Vec3::splat(0.5);
         gizmos.cube(
             Transform::from_translation(center).with_scale(Vec3::splat(1.003)),

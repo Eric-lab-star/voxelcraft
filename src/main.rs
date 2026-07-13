@@ -20,6 +20,7 @@ mod particles;
 mod player;
 mod save;
 mod texture;
+mod viewmodel;
 mod voxel_material;
 mod water;
 mod world;
@@ -56,6 +57,8 @@ fn main() {
         .init_resource::<water::WaterSim>()
         .init_resource::<menu::MenuState>()
         .init_resource::<menu::Toast>()
+        .init_resource::<viewmodel::ViewMode>()
+        .init_resource::<viewmodel::SwingState>()
         // Build the shared texture atlas before anything that references it.
         .add_systems(PreStartup, texture::setup_atlas)
         .add_systems(
@@ -71,6 +74,8 @@ fn main() {
                 player::grab_cursor,
             ),
         )
+        // Spawn the hand viewmodel after the camera entity exists.
+        .add_systems(PostStartup, viewmodel::setup_viewmodel)
         // Menu + always-on world systems.
         .add_systems(
             Update,
@@ -88,6 +93,9 @@ fn main() {
                 water::underwater_effect,
                 water::update_bubbles,
                 chunk::rebuild_dirty_chunks,
+                viewmodel::update_held_item,
+                viewmodel::update_view_visibility,
+                viewmodel::swing_hand,
             ),
         )
         // Player/input systems — paused while the menu is open.
@@ -101,6 +109,11 @@ fn main() {
                 hotbar::update_selection,
                 interaction::edit_blocks,
                 interaction::highlight_target,
+                viewmodel::swing_input,
+                viewmodel::cycle_view_mode,
+                // Positions the camera per view mode; must run after physics
+                // writes the eye transform.
+                viewmodel::apply_view_mode.after(player::player_physics),
             )
                 .run_if(menu::game_active),
         )
@@ -134,7 +147,8 @@ fn apply_window_icon(world: &mut World, mut done: Local<bool>) {
 }
 
 fn setup_scene(mut commands: Commands) {
-    // Sun — its transform/colour are driven by the day/night cycle.
+    // Sun — its transform/colour are driven by the day/night cycle. It lights
+    // both the world (layer 0) and the first-person hand (layer 1).
     commands.spawn((
         DirectionalLight {
             illuminance: 11_000.0,
@@ -143,6 +157,7 @@ fn setup_scene(mut commands: Commands) {
         },
         Transform::from_xyz(60.0, 80.0, 35.0).looking_at(Vec3::ZERO, Vec3::Y),
         daynight::Sun,
+        bevy::camera::visibility::RenderLayers::from_layers(&[0, 1]),
     ));
 
     // (The player/camera is spawned in `setup_world`, where terrain height is

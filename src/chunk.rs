@@ -96,9 +96,13 @@ pub fn setup_world(
     commands.spawn((
         Camera3d::default(),
         Transform::default(),
+        // A visibility root so the child first-person hand renders, and the
+        // default UI camera so the second view-model camera doesn't create UI
+        // ambiguity.
+        Visibility::default(),
+        bevy::ui::IsDefaultUiCamera,
         // Distance fog blends far terrain into the sky, so the world reads as
-        // stretching to the horizon instead of ending at a hard edge. Its
-        // colour is kept in sync with the sky by the day/night system.
+        // stretching to the horizon. Its colour tracks the sky (day/night).
         DistanceFog {
             color: Color::srgb(0.53, 0.74, 0.92),
             falloff: FogFalloff::Linear {
@@ -108,6 +112,26 @@ pub fn setup_world(
             ..default()
         },
         Player::new(spawn),
+        // The view-model camera: renders only the hand layer (1), after the
+        // world, on top, with its own depth so the hand never clips terrain.
+        // `Msaa::Off` is required — a second camera whose MSAA doesn't match the
+        // window's writeback silently fails to composite.
+        children![(
+            Camera3d::default(),
+            Camera {
+                order: 1,
+                // Load (don't clear) so the world drawn by the main camera
+                // stays; we only draw the hand on top.
+                clear_color: bevy::camera::ClearColorConfig::None,
+                ..default()
+            },
+            Projection::from(PerspectiveProjection {
+                fov: 70.0_f32.to_radians(),
+                ..default()
+            }),
+            bevy::render::view::Msaa::Off,
+            bevy::camera::visibility::RenderLayers::layer(1),
+        )],
     ));
 
     commands.insert_resource(world);
