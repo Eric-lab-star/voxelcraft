@@ -96,11 +96,16 @@ pub fn setup_world(
     commands.spawn((
         Camera3d::default(),
         Transform::default(),
-        // A visibility root so the child first-person hand renders, and the
-        // default UI camera so the second view-model camera doesn't create UI
-        // ambiguity.
+        // Match the view-model camera's MSAA (both `Off`). If the two cameras
+        // that share this window disagree on MSAA, the view-model pass — which
+        // loads instead of clears (`ClearColorConfig::None`) — reads a stale
+        // buffer, so the hand smears/ghosts old frames instead of being redrawn.
+        bevy::render::view::Msaa::Off,
+        // A visibility root so the child first-person hand renders. The HUD/menu
+        // are drawn by a separate 2D UI camera (see `setup_scene`) that sits on
+        // top of everything, so this world camera is deliberately NOT the UI
+        // camera.
         Visibility::default(),
-        bevy::ui::IsDefaultUiCamera,
         // Distance fog blends far terrain into the sky, so the world reads as
         // stretching to the horizon. Its colour tracks the sky (day/night).
         DistanceFog {

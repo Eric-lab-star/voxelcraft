@@ -4,7 +4,9 @@
 use bevy::prelude::*;
 use std::f32::consts::TAU;
 
-/// Seconds for one full day/night cycle.
+/// Seconds for one full day/night cycle. Unused while the cycle is frozen at
+/// noon, but kept for when the day/night loop is switched back on.
+#[allow(dead_code)]
 const DAY_LENGTH: f32 = 600.0;
 
 /// Normalised time of day in `0.0..1.0` (0 = sunrise-ish).
@@ -15,8 +17,8 @@ pub struct GameClock {
 
 impl Default for GameClock {
     fn default() -> Self {
-        // Start mid-morning so the world opens in daylight.
-        GameClock { t: 0.15 }
+        // Locked at noon for now — full daylight so the held block stays visible.
+        GameClock { t: 0.25 }
     }
 }
 
@@ -25,14 +27,14 @@ impl Default for GameClock {
 pub struct Sun;
 
 pub fn day_night(
-    time: Res<Time>,
-    mut clock: ResMut<GameClock>,
+    clock: Res<GameClock>,
     mut clear: ResMut<ClearColor>,
     mut ambient: ResMut<GlobalAmbientLight>,
     mut sun: Query<(&mut Transform, &mut DirectionalLight), With<Sun>>,
     mut fog: Query<&mut DistanceFog>,
 ) {
-    clock.t = (clock.t + time.delta_secs() / DAY_LENGTH) % 1.0;
+    // Day/night cycle is frozen for now — the clock stays put (see `GameClock`
+    // default), so the sun holds at noon and the world never darkens.
     let angle = clock.t * TAU;
     let elevation = angle.sin(); // -1 (midnight) .. 1 (noon)
 

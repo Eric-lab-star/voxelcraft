@@ -8,19 +8,21 @@ use bevy::prelude::*;
 use crate::block::Block;
 use crate::texture::{block_tile, BlockAtlas};
 
-/// The blocks available on the hotbar, left to right.
-pub const SLOTS: [Block; 7] = [
-    Block::Grass,
-    Block::Dirt,
-    Block::Stone,
-    Block::Sand,
-    Block::Wood,
-    Block::Leaves,
-    Block::Water,
+/// The hotbar slots, left to right. The first slot is the empty hand (`None`);
+/// selecting it means you hold nothing and see your bare arm.
+pub const SLOTS: [Option<Block>; 8] = [
+    None,
+    Some(Block::Grass),
+    Some(Block::Dirt),
+    Some(Block::Stone),
+    Some(Block::Sand),
+    Some(Block::Wood),
+    Some(Block::Leaves),
+    Some(Block::Water),
 ];
 
-/// Digit keys mapped to slot indices, in order.
-const DIGIT_KEYS: [KeyCode; 7] = [
+/// Digit keys mapped to slot indices, in order (1 = empty hand, 2–8 = blocks).
+const DIGIT_KEYS: [KeyCode; 8] = [
     KeyCode::Digit1,
     KeyCode::Digit2,
     KeyCode::Digit3,
@@ -28,17 +30,25 @@ const DIGIT_KEYS: [KeyCode; 7] = [
     KeyCode::Digit5,
     KeyCode::Digit6,
     KeyCode::Digit7,
+    KeyCode::Digit8,
 ];
 
 /// Which hotbar slot is currently selected.
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct Hotbar {
     pub selected: usize,
 }
 
+impl Default for Hotbar {
+    fn default() -> Self {
+        // Start holding grass (slot 1), not the empty hand.
+        Self { selected: 1 }
+    }
+}
+
 impl Hotbar {
-    /// The block the player will place.
-    pub fn block(&self) -> Block {
+    /// The block the player will place, or `None` when the hand is empty.
+    pub fn block(&self) -> Option<Block> {
         SLOTS[self.selected]
     }
 }
@@ -73,9 +83,7 @@ pub fn setup_hotbar_ui(mut commands: Commands, atlas: Res<BlockAtlas>) {
                 BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.35)),
             ))
             .with_children(|bar| {
-                for (i, block) in SLOTS.iter().enumerate() {
-                    // Show the block's side face as the slot icon.
-                    let index = block_tile(*block, 4) as usize;
+                for (i, slot_block) in SLOTS.iter().enumerate() {
                     bar.spawn((
                         Node {
                             width: Val::Px(46.0),
@@ -88,20 +96,26 @@ pub fn setup_hotbar_ui(mut commands: Commands, atlas: Res<BlockAtlas>) {
                         HotbarSlot(i),
                     ))
                     .with_children(|slot| {
-                        slot.spawn((
-                            Node {
-                                width: Val::Percent(100.0),
-                                height: Val::Percent(100.0),
-                                ..default()
-                            },
-                            ImageNode::from_atlas_image(
-                                atlas.image.clone(),
-                                TextureAtlas {
-                                    layout: atlas.layout.clone(),
-                                    index,
+                        // Empty-hand slot draws no icon — an empty cell reads as
+                        // "hold nothing".
+                        if let Some(block) = slot_block {
+                            // Show the block's side face as the slot icon.
+                            let index = block_tile(*block, 4) as usize;
+                            slot.spawn((
+                                Node {
+                                    width: Val::Percent(100.0),
+                                    height: Val::Percent(100.0),
+                                    ..default()
                                 },
-                            ),
-                        ));
+                                ImageNode::from_atlas_image(
+                                    atlas.image.clone(),
+                                    TextureAtlas {
+                                        layout: atlas.layout.clone(),
+                                        index,
+                                    },
+                                ),
+                            ));
+                        }
                     });
                 }
             });

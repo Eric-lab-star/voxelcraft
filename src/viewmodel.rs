@@ -59,6 +59,15 @@ pub struct ViewHand {
 /// How long one hand swing lasts, in seconds.
 const SWING_TIME: f32 = 0.35;
 
+/// Camera-local point the viewmodel pivots around during a swing — placed below
+/// and behind the resting hand, roughly where a wrist/shoulder would be, so the
+/// block (and bare arm) sweep through a downward-forward arc instead of spinning
+/// about their own centre.
+const SWING_PIVOT: Vec3 = Vec3::new(0.85, -1.25, -0.55);
+
+/// Peak swing rotation about the pivot, in radians (negative = swing down/forward).
+const SWING_ARC: f32 = -0.8;
+
 /// Counts down while the hand is mid-swing (0 = idle, hand hidden).
 #[derive(Resource, Default)]
 pub struct SwingState {
@@ -68,6 +77,32 @@ pub struct SwingState {
 /// Marks the held-block cube so its mesh can be rebuilt on hotbar changes.
 #[derive(Component)]
 pub struct HeldItem;
+
+/// Debug-only live transform for the held block, tuned in-game with the arrow
+/// keys (see `debug_held_rotation`). Seeded with the baked-in resting pose.
+#[derive(Resource)]
+pub struct HeldRotDebug {
+    yaw: f32,
+    pitch: f32,
+    roll: f32,
+    pos: Vec3,
+}
+
+impl Default for HeldRotDebug {
+    fn default() -> Self {
+        // Seed with the baked-in resting pose so tuning starts where it left off.
+        Self {
+            yaw: -3.525,
+            pitch: 0.593,
+            roll: -0.013,
+            pos: Vec3::new(0.793, -0.578, -0.694),
+        }
+    }
+}
+
+/// Marks the bare first-person arm, shown when the hand is empty.
+#[derive(Component)]
+pub struct HandArm;
 
 /// Root of the third-person body avatar (a world entity that follows the
 /// player).
@@ -92,19 +127,40 @@ pub fn setup_viewmodel(
         ..default()
     });
 
-    let held_mesh = meshes.add(block_cube_mesh(hotbar.block()));
+    // Build the cube from whatever block is selected; if the hand starts empty
+    // we still need a mesh, `update_held_item` keeps it in sync afterwards.
+    let held_mesh = meshes.add(block_cube_mesh(hotbar.block().unwrap_or(Block::Grass)));
 
     // Local offset in view space (camera looks down -Z, +X right, +Y up), so the
     // held block rides at the bottom-right of the screen. As a child of the main
     // camera it tracks the eye automatically.
-    let held_local = Transform::from_translation(Vec3::new(0.45, -0.28, -1.0))
-        .with_scale(Vec3::splat(0.44))
-        .with_rotation(Quat::from_euler(EulerRot::YXZ, 0.6, -0.2, 0.15));
+    // Resting pose dialled in live with the debug tool (`debug_held_rotation`):
+    // block riding at the bottom-right, grass top up, a 3/4 view of top + sides.
+    let held_local = Transform::from_translation(Vec3::new(0.793, -0.578, -0.694))
+        .with_scale(Vec3::splat(0.406))
+        .with_rotation(Quat::from_euler(EulerRot::YXZ, -3.525, 0.593, -0.013));
+
+    // The bare arm: a blue sleeve with a skin-toned hand at the tip, tucked into
+    // the bottom-right corner and angling up-left toward the crosshair like
+    // Minecraft's first-person arm.
+    let arm_local = Transform::from_translation(Vec3::new(0.72, -0.85, -1.0))
+        .with_rotation(Quat::from_euler(EulerRot::YXZ, -0.15, -0.30, 0.62));
+    let sleeve_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.16, 0.22, 0.62),
+        ..default()
+    });
+    let hand_skin_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.80, 0.62, 0.47),
+        ..default()
+    });
+    let sleeve_mesh = meshes.add(Cuboid::new(0.16, 0.55, 0.16));
+    let hand_mesh = meshes.add(Cuboid::new(0.17, 0.17, 0.17));
 
     let layer = RenderLayers::layer(HAND_LAYER);
     if let Ok(cam) = camera.single() {
         commands.entity(cam).with_children(|c| {
-            // The held block. Starts hidden; shown only mid-swing.
+            // The held block. Visible while a block is selected (see
+            // `update_viewmodel_visibility`).
             c.spawn((
                 HeldItem,
                 ViewHand { base: held_local },
@@ -112,9 +168,34 @@ pub fn setup_viewmodel(
                 MeshMaterial3d(held_mat),
                 held_local,
                 Visibility::Hidden,
-                layer,
+                layer.clone(),
                 NotShadowCaster,
             ));
+
+            // The bare arm, shown when the hand is empty. Sleeve + hand are
+            // children so the whole arm swings as one via the root's `ViewHand`.
+            c.spawn((
+                HandArm,
+                ViewHand { base: arm_local },
+                arm_local,
+                Visibility::Hidden,
+            ))
+            .with_children(|arm| {
+                arm.spawn((
+                    Mesh3d(sleeve_mesh),
+                    MeshMaterial3d(sleeve_mat),
+                    Transform::from_xyz(0.0, 0.0, 0.0),
+                    layer.clone(),
+                    NotShadowCaster,
+                ));
+                arm.spawn((
+                    Mesh3d(hand_mesh),
+                    MeshMaterial3d(hand_skin_mat),
+                    Transform::from_xyz(0.0, 0.34, 0.0),
+                    layer.clone(),
+                    NotShadowCaster,
+                ));
+            });
         });
     }
 
@@ -226,8 +307,7 @@ pub fn apply_view_mode(
     }
 }
 
-/// Show the third-person body avatar only in the third-person modes. The
-/// first-person hand's visibility is driven by `swing_hand` instead.
+/// Show the third-person body avatar only in the third-person modes.
 pub fn update_view_visibility(
     view: Res<ViewMode>,
     mut body: Query<&mut Visibility, With<PlayerBody>>,
@@ -238,6 +318,41 @@ pub fn update_view_visibility(
     let first = view.is_first_person();
     for mut v in &mut body {
         *v = if first { Visibility::Hidden } else { Visibility::Visible };
+    }
+}
+
+/// Choose which first-person viewmodel is on screen: the held block when a block
+/// is selected, or the bare arm when the hand is empty. Both are hidden outside
+/// first person.
+pub fn update_viewmodel_visibility(
+    view: Res<ViewMode>,
+    hotbar: Res<Hotbar>,
+    mut arm: Query<&mut Visibility, (With<HandArm>, Without<HeldItem>)>,
+    mut block: Query<&mut Visibility, (With<HeldItem>, Without<HandArm>)>,
+) {
+    let first = view.is_first_person();
+    let empty = hotbar.block().is_none();
+
+    let arm_vis = if first && empty {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    let block_vis = if first && !empty {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+
+    for mut v in &mut arm {
+        if *v != arm_vis {
+            *v = arm_vis;
+        }
+    }
+    for mut v in &mut block {
+        if *v != block_vis {
+            *v = block_vis;
+        }
     }
 }
 
@@ -253,31 +368,122 @@ pub fn swing_input(buttons: Res<ButtonInput<MouseButton>>, mut swing: ResMut<Swi
 /// and jabs forward-and-down in an arc (only in first person).
 pub fn swing_hand(
     time: Res<Time>,
-    view: Res<ViewMode>,
     mut swing: ResMut<SwingState>,
-    mut hands: Query<(&ViewHand, &mut Transform, &mut Visibility)>,
+    mut hands: Query<(&ViewHand, &mut Transform)>,
 ) {
     swing.timer = (swing.timer - time.delta_secs()).max(0.0);
-    let active = view.is_first_person() && swing.timer > 0.0;
 
     // Swing progress 0->1, shaped into a 0->1->0 arc so the hand reaches out and
-    // pulls back within the swing.
-    let progress = 1.0 - (swing.timer / SWING_TIME).clamp(0.0, 1.0);
-    let arc = (progress * std::f32::consts::PI).sin();
+    // pulls back within the swing. Zero when idle, leaving the resting pose.
+    let arc = if swing.timer > 0.0 {
+        let progress = 1.0 - (swing.timer / SWING_TIME).clamp(0.0, 1.0);
+        (progress * std::f32::consts::PI).sin()
+    } else {
+        0.0
+    };
 
-    for (hand, mut transform, mut vis) in &mut hands {
-        if active {
-            *vis = Visibility::Inherited;
-            *transform = Transform {
-                translation: hand.base.translation
-                    + Vec3::new(-0.12 * arc, -0.18 * arc, -0.3 * arc),
-                rotation: hand.base.rotation * Quat::from_rotation_x(-1.5 * arc),
-                scale: hand.base.scale,
-            };
-        } else if *vis != Visibility::Hidden {
-            *vis = Visibility::Hidden;
+    // Swing the whole viewmodel rigidly about a lower pivot (in camera space), so
+    // it sweeps a downward-forward arc like an arm rotating at the shoulder/wrist,
+    // rather than spinning about its own centre.
+    let q = Quat::from_rotation_x(SWING_ARC * arc);
+    for (hand, mut transform) in &mut hands {
+        let offset = hand.base.translation - SWING_PIVOT;
+        *transform = Transform {
+            translation: SWING_PIVOT + q * offset,
+            rotation: q * hand.base.rotation,
+            scale: hand.base.scale,
+        };
+    }
+}
+
+/// Debug: live-tune the held block's resting pose and print it so it can be baked
+/// into `held_local`. Arrow keys rotate yaw (◄/►) and pitch (▲/▼); `[`/`]` roll.
+/// Hold **Shift** and the same keys move position instead: ◄/► = X, ▲/▼ = Y,
+/// `[`/`]` = Z. Every change prints a copy-ready `[HELDROT]` line with both.
+pub fn debug_held_rotation(
+    keys: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
+    mut dbg: ResMut<HeldRotDebug>,
+    mut held: Query<&mut ViewHand, With<HeldItem>>,
+) {
+    let step = time.delta_secs();
+    let moving = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    let mut changed = false;
+
+    // Shared key layout: with Shift these nudge position, otherwise rotation.
+    let neg1 = keys.pressed(KeyCode::ArrowLeft); // yaw- / X-
+    let pos1 = keys.pressed(KeyCode::ArrowRight); // yaw+ / X+
+    let pos2 = keys.pressed(KeyCode::ArrowUp); // pitch+ / Y+
+    let neg2 = keys.pressed(KeyCode::ArrowDown); // pitch- / Y-
+    let neg3 = keys.pressed(KeyCode::BracketLeft); // roll- / Z-
+    let pos3 = keys.pressed(KeyCode::BracketRight); // roll+ / Z+
+
+    if moving {
+        // Position: a slower step (~0.5 units/sec) since the pose is close.
+        let s = step * 0.5;
+        if neg1 {
+            dbg.pos.x -= s;
+            changed = true;
+        }
+        if pos1 {
+            dbg.pos.x += s;
+            changed = true;
+        }
+        if pos2 {
+            dbg.pos.y += s;
+            changed = true;
+        }
+        if neg2 {
+            dbg.pos.y -= s;
+            changed = true;
+        }
+        if neg3 {
+            dbg.pos.z -= s;
+            changed = true;
+        }
+        if pos3 {
+            dbg.pos.z += s;
+            changed = true;
+        }
+    } else {
+        if neg1 {
+            dbg.yaw -= step;
+            changed = true;
+        }
+        if pos1 {
+            dbg.yaw += step;
+            changed = true;
+        }
+        if pos2 {
+            dbg.pitch += step;
+            changed = true;
+        }
+        if neg2 {
+            dbg.pitch -= step;
+            changed = true;
+        }
+        if neg3 {
+            dbg.roll -= step;
+            changed = true;
+        }
+        if pos3 {
+            dbg.roll += step;
+            changed = true;
         }
     }
+    if !changed {
+        return;
+    }
+
+    let rot = Quat::from_euler(EulerRot::YXZ, dbg.yaw, dbg.pitch, dbg.roll);
+    for mut hand in &mut held {
+        hand.base.translation = dbg.pos;
+        hand.base.rotation = rot;
+    }
+    println!(
+        "[HELDROT] pos=Vec3::new({:.3}, {:.3}, {:.3}) rot=Quat::from_euler(EulerRot::YXZ, {:.3}, {:.3}, {:.3})",
+        dbg.pos.x, dbg.pos.y, dbg.pos.z, dbg.yaw, dbg.pitch, dbg.roll
+    );
 }
 
 /// Rebuild the held-block cube when the hotbar selection changes.
@@ -292,7 +498,10 @@ pub fn update_held_item(
     let Ok(mesh) = held.single() else {
         return;
     };
-    let _ = meshes.insert(&mesh.0, block_cube_mesh(hotbar.block()));
+    // Only rebuild for real blocks; an empty hand keeps its (hidden) mesh.
+    if let Some(block) = hotbar.block() {
+        let _ = meshes.insert(&mesh.0, block_cube_mesh(block));
+    }
 }
 
 // --- Helpers ---------------------------------------------------------------

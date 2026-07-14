@@ -102,7 +102,9 @@ pub fn edit_blocks(
     mut water: ResMut<WaterSim>,
 ) {
     let break_block = buttons.just_pressed(MouseButton::Left);
-    let place_block = buttons.just_pressed(MouseButton::Right);
+    // Right-click only places when we're actually holding a block; an empty hand
+    // places nothing.
+    let place_block = buttons.just_pressed(MouseButton::Right) && hotbar.block().is_some();
     if !break_block && !place_block {
         return;
     }
@@ -127,7 +129,12 @@ pub fn edit_blocks(
 
     // Remember what we're breaking so we can spray matching particles.
     let broken = world.get(target.x, target.y, target.z);
-    let new_block = if break_block { Block::Air } else { hotbar.block() };
+    let new_block = if break_block {
+        Block::Air
+    } else {
+        // `place_block` is only true when a block is held, so this is safe.
+        hotbar.block().unwrap_or(Block::Air)
+    };
     if world.set(target.x, target.y, target.z, new_block) {
         mark_dirty(&mut dirty, target.x, target.z);
         disturb(&mut water, target); // wake nearby water so it can flow

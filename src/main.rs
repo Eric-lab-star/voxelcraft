@@ -59,6 +59,7 @@ fn main() {
         .init_resource::<menu::Toast>()
         .init_resource::<viewmodel::ViewMode>()
         .init_resource::<viewmodel::SwingState>()
+        .init_resource::<viewmodel::HeldRotDebug>()
         // Build the shared texture atlas before anything that references it.
         .add_systems(PreStartup, texture::setup_atlas)
         .add_systems(
@@ -95,6 +96,7 @@ fn main() {
                 chunk::rebuild_dirty_chunks,
                 viewmodel::update_held_item,
                 viewmodel::update_view_visibility,
+                viewmodel::update_viewmodel_visibility,
                 viewmodel::swing_hand,
             ),
         )
@@ -111,6 +113,7 @@ fn main() {
                 interaction::highlight_target,
                 viewmodel::swing_input,
                 viewmodel::cycle_view_mode,
+                viewmodel::debug_held_rotation,
                 // Positions the camera per view mode; must run after physics
                 // writes the eye transform.
                 viewmodel::apply_view_mode.after(player::player_physics),
@@ -162,6 +165,23 @@ fn setup_scene(mut commands: Commands) {
 
     // (The player/camera is spawned in `setup_world`, where terrain height is
     // known, so it can be placed standing on the ground.)
+
+    // Dedicated UI camera, drawn last (order 2) so the HUD, hotbar and menu
+    // always sit on top of the first-person hand (which the view-model camera
+    // draws at order 1). A 2D camera never renders the 3D world, so it can't
+    // paint terrain back over the hand; `ClearColorConfig::None` keeps the
+    // world+hand underneath, and `Msaa::Off` matches the other two cameras so
+    // this load-not-clear pass doesn't read a stale buffer.
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 2,
+            clear_color: bevy::camera::ClearColorConfig::None,
+            ..default()
+        },
+        bevy::render::view::Msaa::Off,
+        bevy::ui::IsDefaultUiCamera,
+    ));
 
     // Crosshair: a small centred dot.
     commands
