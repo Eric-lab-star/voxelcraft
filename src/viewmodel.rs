@@ -92,10 +92,10 @@ impl Default for HeldRotDebug {
     fn default() -> Self {
         // Seed with the baked-in resting pose so tuning starts where it left off.
         Self {
-            yaw: -3.525,
-            pitch: 0.593,
-            roll: -0.013,
-            pos: Vec3::new(0.793, -0.578, -0.694),
+            yaw: -2.036,
+            pitch: 0.033,
+            roll: 0.321,
+            pos: Vec3::new(0.836, -0.397, -0.694),
         }
     }
 }
@@ -136,9 +136,9 @@ pub fn setup_viewmodel(
     // camera it tracks the eye automatically.
     // Resting pose dialled in live with the debug tool (`debug_held_rotation`):
     // block riding at the bottom-right, grass top up, a 3/4 view of top + sides.
-    let held_local = Transform::from_translation(Vec3::new(0.793, -0.578, -0.694))
+    let held_local = Transform::from_translation(Vec3::new(0.836, -0.397, -0.694))
         .with_scale(Vec3::splat(0.406))
-        .with_rotation(Quat::from_euler(EulerRot::YXZ, -3.525, 0.593, -0.013));
+        .with_rotation(Quat::from_euler(EulerRot::YXZ, -2.036, 0.033, 0.321));
 
     // The bare arm: a blue sleeve with a skin-toned hand at the tip, tucked into
     // the bottom-right corner and angling up-left toward the crosshair like

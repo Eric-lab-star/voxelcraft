@@ -64,13 +64,15 @@ pub fn setup_world(
         extension: VoxelExtension::new(),
     });
     let water = materials.add(StandardMaterial {
-        // Very saturated blue. A blue emissive lift keeps it vivid and bright
-        // even where the multiplied texture would otherwise darken it.
-        base_color: Color::srgba(0.05, 0.35, 1.0, 0.92),
+        // Neutral tint so the water tile's own colour comes through unchanged;
+        // the texture, not the material, decides the hue. Alpha lets the lakebed
+        // read through — but only so far: a bright sandy bed at much below this
+        // washes the blue out to grey.
+        base_color: Color::srgba(1.0, 1.0, 1.0, 0.85),
         base_color_texture: Some(atlas.image.clone()),
-        emissive: LinearRgba::new(0.0, 0.06, 0.35, 1.0),
         alpha_mode: AlphaMode::Blend,
-        perceptual_roughness: 0.12,
+        // Glossy, so the sun leaves a highlight on the surface.
+        perceptual_roughness: 0.08,
         cull_mode: None,
         double_sided: true,
         ..default()

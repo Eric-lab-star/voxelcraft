@@ -14,6 +14,10 @@ use crate::world::{World, WATER_SOURCE};
 /// How often the water simulation steps (seconds). Higher = slower flow.
 const STEP: f32 = 0.28;
 
+/// How fast the surface ripples march (radians/sec). Low enough to read as a
+/// gentle swell rather than a scrolling texture.
+const WAVE_SPEED: f32 = 1.4;
+
 const DOWN: IVec3 = IVec3::new(0, -1, 0);
 const UP: IVec3 = IVec3::new(0, 1, 0);
 const H4: [IVec3; 4] = [
@@ -124,6 +128,25 @@ pub fn simulate_water(
 
 fn level(world: &World, p: IVec3) -> u8 {
     world.water_level(p.x, p.y, p.z)
+}
+
+// --- Surface animation ------------------------------------------------------
+
+/// Roll the water surface by repainting the atlas's water tile each frame with
+/// an advancing wave phase.
+///
+/// The tile can't be scrolled with `uv_transform` the way the clouds are: water
+/// samples one cell of the shared block atlas, so sliding its UVs would drag in
+/// the neighbouring tiles. Repainting 16x16 pixels is cheap, and it animates the
+/// hotbar icon along with the surface for free.
+pub fn animate_water(
+    time: Res<Time>,
+    atlas: Res<crate::texture::BlockAtlas>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    if let Some(mut image) = images.get_mut(&atlas.image) {
+        crate::texture::write_water_tile(&mut image, time.elapsed_secs() * WAVE_SPEED);
+    }
 }
 
 // --- Underwater view (tint + bubbles) --------------------------------------

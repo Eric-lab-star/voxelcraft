@@ -91,6 +91,7 @@ fn main() {
                 save::save_load_input,
                 particles::update_particles,
                 water::simulate_water,
+                water::animate_water,
                 water::underwater_effect,
                 water::update_bubbles,
                 chunk::rebuild_dirty_chunks,

@@ -191,11 +191,7 @@ fn tile_pixel(tile: u32, x: usize, y: usize) -> [u8; 4] {
             c
         }
         T_SAND => shade([214, 200, 150], n, 20.0),
-        T_WATER => {
-            // Subtle horizontal ripple.
-            let ripple = ((y as f32 * 1.3).sin() * 10.0) as i32;
-            shade_offset([48, 108, 190], n, 14.0, ripple)
-        }
+        T_WATER => water_pixel(x, y, n, 0.0),
         T_WOOD_TOP => {
             // Concentric growth rings.
             let dx = x as f32 - 7.5;
@@ -224,6 +220,68 @@ fn tile_pixel(tile: u32, x: usize, y: usize) -> [u8; 4] {
             c
         }
         _ => [255, 0, 255, 255], // magenta = missing
+    }
+}
+
+/// One pixel of the water tile at a given wave `phase` (radians). Advancing the
+/// phase over time marches the crests across the surface; `animate_water` in
+/// `water.rs` repaints the tile each frame.
+///
+/// Every water block's top face repeats this one tile, so the pattern must wrap:
+/// the noise grids and the waves all divide TILE evenly, leaving it seamless
+/// against itself in both axes no matter the phase.
+///
+/// Note the colour is deliberately a strong, bright blue. The surface is alpha
+/// blended over the lakebed, and a bright sandy bed showing through will wash a
+/// timid blue out to grey — the tile has to carry the hue on its own.
+fn water_pixel(x: usize, y: usize, n: f32, phase: f32) -> [u8; 4] {
+    let fx = x as f32 / TILE as f32;
+    let fy = y as f32 / TILE as f32;
+    let tau = std::f32::consts::TAU;
+
+    // A straight sine reads as stripes; warping its phase by wrapping noise
+    // bends the crests into meandering wavefronts. Two waves crossing at
+    // different speeds keep the motion from looking like a sliding image.
+    let swell = 0.65 * cloud_noise(fx, fy, 4) + 0.35 * cloud_noise(fx, fy, 8);
+    let wave = 0.65 * ((fy * tau * 2.0) + swell * 5.0 + phase).sin()
+        + 0.35 * ((fx * tau) - swell * 4.0 - phase * 0.7).sin();
+    let t = 0.5 + 0.5 * wave;
+
+    // Trough -> crest. Kept close together: open water is near-uniform, and it's
+    // the sparse glints below that read as a surface.
+    let deep = [38.0, 108.0, 186.0];
+    let lit = [64.0, 146.0, 222.0];
+    let base = [
+        lerp(deep[0], lit[0], t) as u8,
+        lerp(deep[1], lit[1], t) as u8,
+        lerp(deep[2], lit[2], t) as u8,
+    ];
+    // Thin glints on the highest crests, where the surface catches the sky.
+    if t > 0.93 {
+        shade([122, 190, 240], n, 14.0)
+    } else {
+        shade(base, n, 12.0)
+    }
+}
+
+/// Repaint the atlas's water tile in place at `phase`. Only the 16x16 water tile
+/// is touched; the rest of the atlas is left alone.
+pub fn write_water_tile(image: &mut Image, phase: f32) {
+    let Some(data) = image.data.as_mut() else {
+        return;
+    };
+    let w = COLS * TILE;
+    let col = (T_WATER as usize) % COLS;
+    let row = (T_WATER as usize) / COLS;
+    for y in 0..TILE {
+        for x in 0..TILE {
+            // Same per-pixel grain seed as `tile_pixel`, so the static tile and
+            // the animated one grain identically.
+            let n = hash(T_WATER as i32 * 131 + x as i32, y as i32);
+            let c = water_pixel(x, y, n, phase);
+            let i = ((row * TILE + y) * w + col * TILE + x) * 4;
+            data[i..i + 4].copy_from_slice(&c);
+        }
     }
 }
 
@@ -286,6 +344,79 @@ pub fn block_tile(block: crate::block::Block, face: usize) -> u32 {
             }
         }
         Block::Leaves => T_LEAVES,
+    }
+}
+
+#[cfg(test)]
+mod preview {
+    use super::*;
+    use std::io::Write;
+
+    /// The wave phase must actually move the surface, and the tile must stay
+    /// seamless at any phase (opposite edges sample the same wrapped pattern).
+    #[test]
+    fn water_phase_animates_and_stays_seamless() {
+        let at = |x: usize, y: usize, p: f32| {
+            water_pixel(x, y, hash(T_WATER as i32 * 131 + x as i32, y as i32), p)
+        };
+        let moved = (0..TILE)
+            .flat_map(|y| (0..TILE).map(move |x| (x, y)))
+            .filter(|&(x, y)| at(x, y, 0.0) != at(x, y, 1.0))
+            .count();
+        assert!(moved > 40, "phase barely changed the tile ({moved} px)");
+
+        // Wrapping: fx/fy of 0.0 and 1.0 are the same point on the torus, so the
+        // pattern must agree there for the tile to abut itself without a seam.
+        for p in [0.0, 1.7, 4.2] {
+            let edge = |a: f32, b: f32| {
+                let tau = std::f32::consts::TAU;
+                let swell_a = 0.65 * cloud_noise(a, b, 4) + 0.35 * cloud_noise(a, b, 8);
+                (swell_a, ((b * tau * 2.0) + swell_a * 5.0 + p).sin())
+            };
+            let (s0, w0) = edge(0.0, 0.3);
+            let (s1, w1) = edge(1.0, 0.3);
+            assert!((s0 - s1).abs() < 1e-4, "noise seam in x at phase {p}");
+            assert!((w0 - w1).abs() < 1e-4, "wave seam in x at phase {p}");
+        }
+    }
+
+    /// TEMPORARY: dump a tile 3x3-tiled to a BMP so the pattern and its seams can
+    /// be eyeballed. `cargo test -- --nocapture preview`.
+    #[test]
+    fn preview_water_tile() {
+        const REP: usize = 3;
+        const SCALE: usize = 8;
+        let w = TILE * REP * SCALE;
+        let h = w;
+        let mut px = vec![0u8; w * h * 3];
+        for y in 0..h {
+            for x in 0..w {
+                let c = tile_pixel(T_WATER, (x / SCALE) % TILE, (y / SCALE) % TILE);
+                let i = (y * w + x) * 3;
+                px[i] = c[2]; // BMP is BGR
+                px[i + 1] = c[1];
+                px[i + 2] = c[0];
+            }
+        }
+        // 24-bit BMP, rows bottom-up. Width is chosen so rows need no padding.
+        assert_eq!((w * 3) % 4, 0);
+        let size = 54 + px.len();
+        let out = std::env::temp_dir().join("water_preview.bmp");
+        println!("preview -> {}", out.display());
+        let mut f = std::fs::File::create(&out).unwrap();
+        f.write_all(b"BM").unwrap();
+        f.write_all(&(size as u32).to_le_bytes()).unwrap();
+        f.write_all(&[0u8; 4]).unwrap();
+        f.write_all(&54u32.to_le_bytes()).unwrap();
+        f.write_all(&40u32.to_le_bytes()).unwrap();
+        f.write_all(&(w as i32).to_le_bytes()).unwrap();
+        f.write_all(&(h as i32).to_le_bytes()).unwrap();
+        f.write_all(&1u16.to_le_bytes()).unwrap();
+        f.write_all(&24u16.to_le_bytes()).unwrap();
+        f.write_all(&[0u8; 24]).unwrap();
+        for y in (0..h).rev() {
+            f.write_all(&px[y * w * 3..(y + 1) * w * 3]).unwrap();
+        }
     }
 }
 
