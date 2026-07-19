@@ -14,9 +14,10 @@ use crate::world::{World, WATER_SOURCE};
 /// How often the water simulation steps (seconds). Higher = slower flow.
 const STEP: f32 = 0.28;
 
-/// How fast the surface ripples march (radians/sec). Low enough to read as a
-/// gentle swell rather than a scrolling texture.
-const WAVE_SPEED: f32 = 1.4;
+/// How fast the surface ripples march (radians/sec). The crossing waves in
+/// `water_field` run at different multiples of this, so it reads as choppy water
+/// rather than one texture scrolling past.
+const WAVE_SPEED: f32 = 2.2;
 
 const DOWN: IVec3 = IVec3::new(0, -1, 0);
 const UP: IVec3 = IVec3::new(0, 1, 0);

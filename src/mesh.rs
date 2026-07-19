@@ -162,9 +162,27 @@ struct MeshBuf {
 }
 
 impl MeshBuf {
-    /// Emit one per-face quad with atlas UVs baked in (used for water, which is
-    /// drawn by a plain `StandardMaterial`).
-    fn push_face(&mut self, face: &Face, wx: i32, wy: i32, wz: i32, f: usize, tile: u32, ao: [f32; 4]) {
+    /// Emit one per-face water quad with atlas UVs baked in.
+    ///
+    /// Vertex-colour alpha carries a flag the water shader reads: 1 marks a
+    /// vertex sitting on the free surface, which the vertex shader displaces
+    /// with the wave field; 0 pins it. A vertex is on the surface when it is at
+    /// the top of its block (`corner[1] == 1.0`) and that block is `open` to the
+    /// air above. Flagging by corner height rather than by face means a top
+    /// quad and the upper edge of the side quads beside it get the *same* flag
+    /// — and since the displacement is a function of world XZ alone, the
+    /// duplicated vertices where they meet move together and the surface stays
+    /// watertight.
+    fn push_water_face(
+        &mut self,
+        face: &Face,
+        wx: i32,
+        wy: i32,
+        wz: i32,
+        f: usize,
+        tile: u32,
+        open: bool,
+    ) {
         // Side faces list two bottom corners then two top corners, keeping
         // textures upright; top/bottom faces are laid out flat.
         let corner_uv = if f == 2 || f == 3 {
@@ -182,11 +200,13 @@ impl MeshBuf {
             ]);
             self.normals.push(face.normal);
             self.uvs.push(atlas_uv(tile, corner_uv[ci][0], corner_uv[ci][1]));
-            let b = s * ao[ci]; // face shading × ambient occlusion
-            self.colors.push([b, b, b, 1.0]);
+            let surface = open && corner[1] == 1.0;
+            self.colors
+                .push([s, s, s, if surface { 1.0 } else { 0.0 }]);
         }
-        // Split the quad along the diagonal that keeps AO interpolation
-        // symmetric (avoids the classic voxel-AO seam artifact).
+        // Water is drawn without AO, so the diagonal choice is arbitrary; keep
+        // the same split the opaque path uses for consistency.
+        let ao = [1.0f32; 4];
         if ao[0] + ao[2] > ao[1] + ao[3] {
             self.indices.extend_from_slice(&[
                 start,
@@ -461,6 +481,11 @@ fn build_water(world: &World, buf: &mut MeshBuf, ox: i32, oz: i32) {
                 if world.get(wx, wy, wz) != Block::Water {
                     continue;
                 }
+                // Open to the sky, so this block's top edge is the free surface
+                // the waves displace. A submerged block keeps its corners pinned
+                // even where a side face is exposed (a waterfall wall), or it
+                // would tear away from the block stacked on it.
+                let open = world.get(wx, wy + 1, wz) != Block::Water;
                 for (f, face) in FACES.iter().enumerate() {
                     let n = NEIGHBOURS[f];
                     // A water face shows only against air.
@@ -468,7 +493,7 @@ fn build_water(world: &World, buf: &mut MeshBuf, ox: i32, oz: i32) {
                         continue;
                     }
                     let tile = block_tile(Block::Water, f);
-                    buf.push_face(face, wx, wy, wz, f, tile, [1.0; 4]);
+                    buf.push_water_face(face, wx, wy, wz, f, tile, open);
                 }
             }
         }

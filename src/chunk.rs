@@ -7,6 +7,7 @@ use crate::mesh::{build_chunk_meshes, ChunkMeshes};
 use crate::player::Player;
 use crate::texture::BlockAtlas;
 use crate::voxel_material::{TerrainMaterial, VoxelExtension};
+use crate::water_material::{WaterExtension, WaterMaterial};
 use crate::world::{World, CHUNK_SIZE, WORLD_X, WORLD_Z};
 use bevy::pbr::Material;
 use bevy::prelude::*;
@@ -31,7 +32,7 @@ pub struct DirtyChunks(pub HashSet<(i32, i32)>);
 #[derive(Resource)]
 pub struct ChunkMaterials {
     pub terrain: Handle<TerrainMaterial>,
-    pub water: Handle<StandardMaterial>,
+    pub water: Handle<WaterMaterial>,
 }
 
 /// Convert a world block X/Z to its chunk coordinate.
@@ -42,8 +43,8 @@ pub fn chunk_of(x: i32, z: i32) -> (i32, i32) {
 pub fn setup_world(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut terrain_materials: ResMut<Assets<TerrainMaterial>>,
+    mut water_materials: ResMut<Assets<WaterMaterial>>,
     atlas: Res<BlockAtlas>,
 ) {
     // Resume slot 1 if it exists, otherwise generate a fresh one.
@@ -63,19 +64,27 @@ pub fn setup_world(
         },
         extension: VoxelExtension::new(),
     });
-    let water = materials.add(StandardMaterial {
-        // Neutral tint so the water tile's own colour comes through unchanged;
-        // the texture, not the material, decides the hue. Alpha lets the lakebed
-        // read through — but only so far: a bright sandy bed at much below this
-        // washes the blue out to grey.
-        base_color: Color::srgba(1.0, 1.0, 1.0, 0.85),
-        base_color_texture: Some(atlas.image.clone()),
-        alpha_mode: AlphaMode::Blend,
-        // Glossy, so the sun leaves a highlight on the surface.
-        perceptual_roughness: 0.08,
-        cull_mode: None,
-        double_sided: true,
-        ..default()
+    let water = water_materials.add(WaterMaterial {
+        base: StandardMaterial {
+            // Neutral tint so the water tile's own colour comes through
+            // unchanged; the texture, not the material, decides the hue. Alpha
+            // lets the lakebed read through — but only so far: a bright sandy
+            // bed at much below this washes the blue out to grey.
+            base_color: Color::srgba(1.0, 1.0, 1.0, 0.9),
+            base_color_texture: Some(atlas.image.clone()),
+            alpha_mode: AlphaMode::Blend,
+            // Damp, not mirrored. At 0.08 roughness with the default 0.5
+            // reflectance the sun laid a broad white sheen right across the
+            // up-facing surface, and seen from above that sheen *was* the water
+            // — the blue underneath never got through. Real water reflects about
+            // 0.02 head-on; 0.12 keeps a highlight without bleaching the hue.
+            perceptual_roughness: 0.34,
+            reflectance: 0.12,
+            cull_mode: None,
+            double_sided: true,
+            ..default()
+        },
+        extension: WaterExtension::new(),
     });
     let mats = ChunkMaterials { terrain, water };
 

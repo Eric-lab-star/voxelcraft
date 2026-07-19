@@ -237,31 +237,51 @@ fn tile_pixel(tile: u32, x: usize, y: usize) -> [u8; 4] {
 fn water_pixel(x: usize, y: usize, n: f32, phase: f32) -> [u8; 4] {
     let fx = x as f32 / TILE as f32;
     let fy = y as f32 / TILE as f32;
-    let tau = std::f32::consts::TAU;
+    let (t, chop) = water_field(fx, fy, phase);
 
-    // A straight sine reads as stripes; warping its phase by wrapping noise
-    // bends the crests into meandering wavefronts. Two waves crossing at
-    // different speeds keep the motion from looking like a sliding image.
-    let swell = 0.65 * cloud_noise(fx, fy, 4) + 0.35 * cloud_noise(fx, fy, 8);
-    let wave = 0.65 * ((fy * tau * 2.0) + swell * 5.0 + phase).sin()
-        + 0.35 * ((fx * tau) - swell * 4.0 - phase * 0.7).sin();
-    let t = 0.5 + 0.5 * wave;
-
-    // Trough -> crest. Kept close together: open water is near-uniform, and it's
-    // the sparse glints below that read as a surface.
-    let deep = [38.0, 108.0, 186.0];
-    let lit = [64.0, 146.0, 222.0];
+    // Trough -> crest, aimed at the deep blue of the underwater overlay in
+    // `water.rs`. Deliberately darker than it needs to look on its own: the top
+    // face is the brightest in `FACE_SHADE` and takes full sun plus ambient, and
+    // the tonemapper pulls anything that bright towards white. A tile that reads
+    // "correct" flat here comes out bleached in game, so the hue has to sit low
+    // enough to survive being lit.
+    let deep = [12.0, 62.0, 145.0];
+    let lit = [36.0, 112.0, 205.0];
     let base = [
         lerp(deep[0], lit[0], t) as u8,
         lerp(deep[1], lit[1], t) as u8,
         lerp(deep[2], lit[2], t) as u8,
     ];
-    // Thin glints on the highest crests, where the surface catches the sky.
-    if t > 0.93 {
-        shade([122, 190, 240], n, 14.0)
+    // Thin glints on the highest crests, where the surface catches the sky. The
+    // threshold breathes with the phase so they twinkle in and out rather than
+    // sliding across as a rigid pattern.
+    let gate = 0.90 + 0.05 * (phase * 2.3 + chop * std::f32::consts::TAU).sin();
+    if t > gate {
+        shade([116, 182, 238], n, 14.0)
     } else {
         shade(base, n, 12.0)
     }
+}
+
+/// The water surface height at a tile UV and wave `phase`, as `(t, chop)`: `t`
+/// runs 0 (trough) to 1 (crest), `chop` is the fine noise the glints key off.
+///
+/// A straight sine reads as stripes; warping its phase by wrapping noise bends
+/// the crests into meandering wavefronts. Three waves cross here at different
+/// frequencies, directions and speeds — the fast diagonal one is what stops the
+/// motion from reading as a single image sliding by.
+///
+/// Everything in here must wrap over [0,1] in both axes for the tile to abut
+/// itself seamlessly: `cloud_noise` wraps, and every frequency is a whole number
+/// of turns. `water_seams_wrap_at_any_phase` holds this.
+fn water_field(fx: f32, fy: f32, phase: f32) -> (f32, f32) {
+    let tau = std::f32::consts::TAU;
+    let swell = 0.65 * cloud_noise(fx, fy, 4) + 0.35 * cloud_noise(fx, fy, 8);
+    let chop = cloud_noise(fx, fy, 8);
+    let wave = 0.50 * ((fy * tau * 2.0) + swell * 5.0 + phase).sin()
+        + 0.30 * ((fx * tau) - swell * 4.0 - phase * 0.7).sin()
+        + 0.20 * (((fx + fy) * tau * 3.0) + chop * 6.0 + phase * 1.6).sin();
+    (0.5 + 0.5 * wave, chop)
 }
 
 /// Repaint the atlas's water tile in place at `phase`. Only the 16x16 water tile
@@ -365,18 +385,27 @@ mod preview {
             .count();
         assert!(moved > 40, "phase barely changed the tile ({moved} px)");
 
-        // Wrapping: fx/fy of 0.0 and 1.0 are the same point on the torus, so the
-        // pattern must agree there for the tile to abut itself without a seam.
+    }
+
+    /// Wrapping: a UV of 0.0 and 1.0 are the same point on the torus, so the
+    /// surface must agree there for the tile to abut itself without a seam.
+    /// Checked through `water_field` itself, in both axes, so every wave term is
+    /// covered rather than a copy of one of them.
+    #[test]
+    fn water_seams_wrap_at_any_phase() {
         for p in [0.0, 1.7, 4.2] {
-            let edge = |a: f32, b: f32| {
-                let tau = std::f32::consts::TAU;
-                let swell_a = 0.65 * cloud_noise(a, b, 4) + 0.35 * cloud_noise(a, b, 8);
-                (swell_a, ((b * tau * 2.0) + swell_a * 5.0 + p).sin())
-            };
-            let (s0, w0) = edge(0.0, 0.3);
-            let (s1, w1) = edge(1.0, 0.3);
-            assert!((s0 - s1).abs() < 1e-4, "noise seam in x at phase {p}");
-            assert!((w0 - w1).abs() < 1e-4, "wave seam in x at phase {p}");
+            for k in 0..TILE {
+                let a = k as f32 / TILE as f32;
+                let (tx0, cx0) = water_field(0.0, a, p);
+                let (tx1, cx1) = water_field(1.0, a, p);
+                assert!((tx0 - tx1).abs() < 1e-4, "wave seam in x at {a}, phase {p}");
+                assert!((cx0 - cx1).abs() < 1e-4, "noise seam in x at {a}, phase {p}");
+
+                let (ty0, cy0) = water_field(a, 0.0, p);
+                let (ty1, cy1) = water_field(a, 1.0, p);
+                assert!((ty0 - ty1).abs() < 1e-4, "wave seam in y at {a}, phase {p}");
+                assert!((cy0 - cy1).abs() < 1e-4, "noise seam in y at {a}, phase {p}");
+            }
         }
     }
 
