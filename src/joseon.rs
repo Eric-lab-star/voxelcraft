@@ -195,6 +195,16 @@ const GEONCHEONG_RZ: i32 = s(16);
 /// 장안당, the king's side, in front of 곤녕합, the queen's.
 const JANGAN_Z: i32 = -s(8);
 const GONNYEONG_Z: i32 = s(8);
+
+/// 태원전, in the north-west quarter — the largest piece of empty ground left
+/// inside the walls, 37 blocks across between the west wall and the flanking
+/// path and 83 deep between the north wall and 수정전.
+const TAEWON_X: i32 = -s(26);
+const TAEWON_Z: i32 = -s(76);
+const TAEWON_RX: i32 = s(11);
+const TAEWON_RZ: i32 = s(14);
+/// The shrine hall stands deep in its yard, at the back of the court.
+const TAEWON_HALL_Z: i32 = -s(6);
 /// The side compounds, in the strips between the inner yards and the precinct
 /// wall. Their half-width is 7, so a centre of 30 spans 23..37 — clear of both
 /// the court cloister's eaves at 22 and the precinct wall at 38.
@@ -269,6 +279,8 @@ fn place_palace(world: &mut World, gy: i32) {
     place_hyangwonjeong(world, cx, cz + HYANGWON_Z, gy);
     // 건청궁, in the corner beyond it.
     place_geoncheongung(world, cx + GEONCHEONG_X, cz + GEONCHEONG_Z, gy);
+    // 태원전, in the matching corner to the west.
+    place_taewonjeon(world, cx + TAEWON_X, cz + TAEWON_Z, gy);
 
     // Last, so every gateway it has to meet is already standing. Paths are laid
     // at ground level only, so this cannot disturb any of them.
@@ -443,6 +455,29 @@ fn place_donggung(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // sleeping hall of the king's, so neither is 무량각.
     place_residence(world, cx, cz + JASEON_Z, gy, HALL_X, HALL_Z, true);
     place_residence(world, cx, cz + BIHYEON_Z, gy, HALL_X, HALL_Z, true);
+}
+
+// --- 태원전 (the shrine, in the north-west quarter) --------------------------
+
+/// 태원전 — the shrine hall, standing alone at the back of a deep walled yard.
+///
+/// This one is not lived in and must not look as though it is. Every other
+/// compound in the palace centres its hall in its yard; this one pushes the
+/// hall to the *back* and leaves the whole court in front of it empty, so you
+/// come through the gate and cross twenty blocks of nothing to reach it. The
+/// emptiness is the building — a shrine precinct is arranged to be walked
+/// through slowly, and it is the only thing here that distinguishes this from
+/// another pair of quarters.
+///
+/// It genuinely is one hall. A subsidiary 영사재 was tried in the court and
+/// filled exactly the space that does the work, and the yard is 33 blocks
+/// across — too narrow to stand one beside the hall instead.
+fn place_taewonjeon(world: &mut World, cx: i32, cz: i32, gy: i32) {
+    const HALL_X: i32 = s(6);
+    const HALL_Z: i32 = s(4);
+
+    compound_wall(world, cx, cz, gy, TAEWON_RX, TAEWON_RZ, false);
+    place_residence(world, cx, cz + TAEWON_HALL_Z, gy, HALL_X, HALL_Z, true);
 }
 
 // --- 건청궁 (the king's private residence, behind the garden) ----------------
@@ -1321,6 +1356,14 @@ fn lay_paths(world: &mut World, cx: i32, cz: i32, gy: i32) {
         pave(world, gy, gate_x, approach, gate_x, gate_z, Block::Road);
     }
 
+    // 태원전, off the north end of the west flank. Its gateway is in the south
+    // face, so the spur runs out level with the flank's end and then turns up
+    // into it.
+    let tw_x = cx + TAEWON_X;
+    let tw_gate = cz + TAEWON_Z + TAEWON_RZ;
+    pave(world, gy, cx - BYPASS_X, flank_north, tw_x, flank_north, Block::Road);
+    pave(world, gy, tw_x, flank_north, tw_x, tw_gate, Block::Road);
+
     // 경회루. Its pond fills the strip between the court's west cloister and
     // the precinct wall, and that cloister is unbroken down its whole length,
     // so there is no way west out of the court at this latitude at all — a spur
@@ -1586,6 +1629,7 @@ mod checks {
             ("비현각", cx + DONGGUNG_X, cz + DONGGUNG_Z + BIHYEON_Z),
             ("장안당", cx + GEONCHEONG_X, cz + GEONCHEONG_Z + JANGAN_Z),
             ("곤녕합", cx + GEONCHEONG_X, cz + GEONCHEONG_Z + GONNYEONG_Z),
+            ("태원전", cx + TAEWON_X, cz + TAEWON_Z + TAEWON_HALL_Z),
             ("향원정", cx, cz + HYANGWON_Z),
         ] {
             let columns = count_in(&w, x, z, 8, 8, Block::RedPillar);
@@ -1791,6 +1835,7 @@ mod checks {
                 cx + GEONCHEONG_X - GEONCHEONG_RX,
                 cz + GEONCHEONG_Z,
             ),
+            ("태원전", cx + TAEWON_X, cz + TAEWON_Z + TAEWON_RZ),
             ("자경전", cx + JAGYEONG_X, cz + JAGYEONG_Z + s(11)),
             ("동궁", cx + DONGGUNG_X, cz + DONGGUNG_Z + DONGGUNG_RZ),
             ("수정전", cx + SUJEONG_X, cz + SUJEONG_Z + s(8)),
