@@ -12,11 +12,19 @@ use noise::{NoiseFn, Perlin};
 /// Width/depth of a mesh chunk in blocks.
 pub const CHUNK_SIZE: i32 = 16;
 
-/// World size in blocks. 경복궁's precinct is 76 by 124 blocks at roughly one
-/// block to the metre; 256 square left it filling a third of the map with the
-/// approach from 광화문 badly foreshortened. 384 gives the axis room to run.
-pub const WORLD_X: i32 = 384;
-pub const WORLD_Z: i32 = 384;
+/// World size in blocks. 경복궁's precinct is 114 by 196 at roughly a block to
+/// the metre, and it is the ground *around* it that has driven this: 256 left
+/// the approach from 광화문 badly foreshortened, and 384 left only ten blocks
+/// between the palace's north wall and the edge of the walkable area — the one
+/// direction that matters, since 북악산 stands immediately behind the palace
+/// and the whole plan is arranged against it. 512 puts 74 blocks there.
+///
+/// Costs, measured on the 조선 map in release: worldgen 121ms and meshing every
+/// column 718ms, so about eight-tenths of a second of startup behind the title
+/// screen, against 473ms at 384. A save slot goes from 18MB to 32MB, the format
+/// still being one raw byte per block.
+pub const WORLD_X: i32 = 512;
+pub const WORLD_Z: i32 = 512;
 /// Vertical extent. At 64 the palace had 31 blocks of headroom above
 /// `FLAT_LEVEL` — 근정전 already used 18 of them, which left no room to build
 /// its halls at a size where 공포 brackets and a swept 처마 are more than one
