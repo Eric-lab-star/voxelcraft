@@ -59,9 +59,16 @@ pub(super) fn place_inner_quarters(world: &mut World, cx: i32, cz: i32, gy: i32)
     // 아미산 — the terraced garden behind the queen's hall. Each step is both
     // further north and one course higher, so the ground climbs away from the
     // hall towards the back wall rather than towards it.
+    //
+    // It has to start clear of 교태전's own platform, which reaches `s(4) + s(2)`
+    // behind the hall's centre. Beginning at `s(4)` put five of its eight
+    // terraces *under* that platform, and since both are granite laid at the
+    // same level the two merged into one slab: the garden was there in the
+    // world and invisible in it.
+    let amisan_start = s(4) + s(2) + d(2);
     for step in 0..s(4) {
-        let dz = GYOTAE_Z - s(4) - step;
-        for dx in -s(12)..=s(12) {
+        let dz = GYOTAE_Z - amisan_start - step;
+        for dx in -d(12)..=d(12) {
             for h in 0..=step {
                 world.set(cx + dx, gy + 1 + h, cz + dz, Block::Granite);
             }

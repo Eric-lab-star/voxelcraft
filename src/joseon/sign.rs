@@ -47,8 +47,8 @@ fn table() -> Vec<(i32, i32, &'static str)> {
     add(HEUMGYEONG_X + s(4), FLANKING_HALL_Z, "흠경각");
 
     // The compounds either side, each beside its own gateway.
-    add(JAGYEONG_X + s(4), JAGYEONG_Z + s(11) + 2, "자경전");
-    add(SUJEONG_X + s(4), SUJEONG_Z + s(8) + 2, "수정전");
+    add(JAGYEONG_X + s(4), JAGYEONG_Z + SIDE_RZ + 2, "자경전");
+    add(SUJEONG_X + s(4), SUJEONG_Z + SIDE_RZ + 2, "수정전");
     add(DONGGUNG_X + s(4), DONGGUNG_Z + DONGGUNG_RZ + 2, "동궁");
     add(HAMHWA_X + s(4), HAMHWA_Z + HAMHWA_RZ + 2, "함화당");
     add(TAEWON_X + s(4), TAEWON_Z + TAEWON_RZ + 2, "태원전");

@@ -111,6 +111,25 @@ const GYOTAE_Z: i32 = -d(66); // 교태전, the queen's
 /// 향원정, in the rear garden well beyond the living quarters.
 const HYANGWON_Z: i32 = -d(84);
 
+/// How much clear ground a walled compound keeps around what stands in it.
+///
+/// Yards used to be independent numbers that happened to work, and when the
+/// distance scale was pulled away from the building scale they stopped
+/// happening to work: the compounds whose extents were named constants grew,
+/// and the two written as bare literals in their calls did not. 자경전 and
+/// 수정전 ended up with their halls touching the yard wall on both sides while
+/// 동궁's yard had forty blocks of nothing in it.
+///
+/// So a yard is now derived from its contents rather than stated. Change a
+/// hall's size and its yard follows.
+const YARD: i32 = d(4);
+
+/// The yard a compound needs to hold something of half-extents `(x, z)`,
+/// platform and all.
+const fn yard_for(hall_x: i32, hall_z: i32) -> (i32, i32) {
+    (hall_x + s(2) + YARD, hall_z + s(2) + YARD)
+}
+
 /// 함원전 and 흠경각, in the strips either side of 교태전.
 ///
 /// These are what widening the precinct was for. The strip is 15 blocks between
@@ -140,8 +159,11 @@ const JIPOK_Z: i32 = -d(81);
 
 const GEONCHEONG_X: i32 = d(27);
 const GEONCHEONG_Z: i32 = -d(81);
-const GEONCHEONG_RX: i32 = d(9);
-const GEONCHEONG_RZ: i32 = d(16);
+const GEONCHEONG_HALL_X: i32 = s(5);
+const GEONCHEONG_HALL_Z: i32 = s(3);
+const GEONCHEONG_RX: i32 = yard_for(GEONCHEONG_HALL_X, GEONCHEONG_HALL_Z).0;
+const GEONCHEONG_RZ: i32 =
+    GONNYEONG_Z + yard_for(GEONCHEONG_HALL_X, GEONCHEONG_HALL_Z).1;
 
 /// 장안당, the king's side, in front of 곤녕합, the queen's.
 const JANGAN_Z: i32 = -d(8);
@@ -151,8 +173,11 @@ const GONNYEONG_Z: i32 = d(8);
 /// path and running 83 deep from the north wall down to 수정전.
 const TAEWON_X: i32 = -d(34);
 const TAEWON_Z: i32 = -d(76);
-const TAEWON_RX: i32 = d(11);
-const TAEWON_RZ: i32 = d(14);
+const TAEWON_BODY_X: i32 = s(6);
+const TAEWON_BODY_Z: i32 = s(4);
+const TAEWON_RX: i32 = yard_for(TAEWON_BODY_X, TAEWON_BODY_Z).0;
+/// Deeper than the hall needs on purpose — the empty forecourt is the point.
+const TAEWON_RZ: i32 = yard_for(TAEWON_BODY_X, TAEWON_BODY_Z).1 + d(7);
 
 /// The shrine hall stands deep in its yard, at the back of the court.
 const TAEWON_HALL_Z: i32 = -d(6);
@@ -163,8 +188,10 @@ const TAEWON_HALL_Z: i32 = -d(6);
 /// precinct has since been widened, so it is no longer the last.
 const HAMHWA_X: i32 = -d(34);
 const HAMHWA_Z: i32 = -d(53);
-const HAMHWA_RX: i32 = d(11);
-const HAMHWA_RZ: i32 = d(7);
+const HAMHWA_HALL_X: i32 = s(2);
+const HAMHWA_HALL_Z: i32 = s(3);
+const HAMHWA_RX: i32 = HAMHWA_SPREAD + yard_for(HAMHWA_HALL_X, HAMHWA_HALL_Z).0;
+const HAMHWA_RZ: i32 = yard_for(HAMHWA_HALL_X, HAMHWA_HALL_Z).1;
 /// The two halls stand side by side, the ground here being wider than deep.
 ///
 /// How far apart is fixed rather than chosen: the yard is 33 blocks across and
@@ -179,17 +206,24 @@ const HAMHWA_SPREAD: i32 = 8;
 /// four to the wall outside.
 const JAGYEONG_X: i32 = d(39); // 자경전, the dowager queen's hall
 const JAGYEONG_Z: i32 = -d(52);
-
 const SUJEONG_X: i32 = -d(39); // 수정전, west of the axis
 const SUJEONG_Z: i32 = -d(36);
+
+/// Both hold one hall of the same size, so both take the same yard.
+const SIDE_HALL_X: i32 = s(5);
+const SIDE_HALL_Z: i32 = s(4);
+const SIDE_RX: i32 = yard_for(SIDE_HALL_X, SIDE_HALL_Z).0;
+const SIDE_RZ: i32 = yard_for(SIDE_HALL_X, SIDE_HALL_Z).1;
 
 const DONGGUNG_X: i32 = d(39); // 동궁, the crown prince's quarters
 /// 동궁's compound. Its band is 21 blocks across, so its two halls cannot stand
 /// side by side however the real ones are drawn — the yard runs deep instead
 /// and puts one behind the other.
-const DONGGUNG_RX: i32 = d(7);
-
-const DONGGUNG_RZ: i32 = d(15);
+const DONGGUNG_HALL: i32 = s(3);
+const DONGGUNG_RX: i32 = yard_for(DONGGUNG_HALL, DONGGUNG_HALL).0;
+/// Deep enough for both halls: the spread between them plus one hall's own
+/// reach, plus the yard margin.
+const DONGGUNG_RZ: i32 = BIHYEON_Z + yard_for(DONGGUNG_HALL, DONGGUNG_HALL).1;
 
 /// 자선당, where the crown prince lived, in front of 비현각, where he was
 /// taught. Offsets from the compound's centre.
@@ -260,8 +294,16 @@ fn place_palace(world: &mut World, gy: i32) {
     place_jagyeongjeon(world, cx + JAGYEONG_X, cz + JAGYEONG_Z, gy);
     // 수정전 and 동궁 fill the flanks either side of the inner yards, which were
     // bare ground between the cloister and the precinct wall.
-    compound_wall(world, cx + SUJEONG_X, cz + SUJEONG_Z, gy, s(7), s(8), false);
-    place_residence(world, cx + SUJEONG_X, cz + SUJEONG_Z, gy, s(5), s(4), true);
+    compound_wall(world, cx + SUJEONG_X, cz + SUJEONG_Z, gy, SIDE_RX, SIDE_RZ, false);
+    place_residence(
+        world,
+        cx + SUJEONG_X,
+        cz + SUJEONG_Z,
+        gy,
+        SIDE_HALL_X,
+        SIDE_HALL_Z,
+        true,
+    );
     place_donggung(world, cx + DONGGUNG_X, cz + DONGGUNG_Z, gy);
     // 향원정 — the hexagonal pavilion in the rear garden, at the far north.
     place_hyangwonjeong(world, cx, cz + HYANGWON_Z, gy);

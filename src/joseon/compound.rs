@@ -35,8 +35,8 @@ pub(super) fn place_jagyeongjeon(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // 꽃담 — the patterned wall this hall is known for. Only its south face gets
     // the painted course; it is the side you see, and decorating all four would
     // spend the effect.
-    compound_wall(world, cx, cz, gy, s(7), s(11), true);
-    place_residence(world, cx, cz, gy, s(5), s(4), true);
+    compound_wall(world, cx, cz, gy, SIDE_RX, SIDE_RZ, true);
+    place_residence(world, cx, cz, gy, SIDE_HALL_X, SIDE_HALL_Z, true);
 
     // 십장생 굴뚝 — the tall decorated chimney standing in the yard behind.
     let chimney_z = cz - s(9);
@@ -64,14 +64,11 @@ pub(super) fn place_donggung(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // filling it. At s(4) the eaves came within a block of the 담장 on both
     // sides and the whole compound read as a lid rather than as a yard with
     // buildings standing in it.
-    const HALL_X: i32 = s(3);
-    const HALL_Z: i32 = s(3);
-
     compound_wall(world, cx, cz, gy, DONGGUNG_RX, DONGGUNG_RZ, false);
     // 자선당 in front, 비현각 behind it. Both keep their ridge — neither is a
     // sleeping hall of the king's, so neither is 무량각.
-    place_residence(world, cx, cz + JASEON_Z, gy, HALL_X, HALL_Z, true);
-    place_residence(world, cx, cz + BIHYEON_Z, gy, HALL_X, HALL_Z, true);
+    place_residence(world, cx, cz + JASEON_Z, gy, DONGGUNG_HALL, DONGGUNG_HALL, true);
+    place_residence(world, cx, cz + BIHYEON_Z, gy, DONGGUNG_HALL, DONGGUNG_HALL, true);
 }
 
 // --- 태원전 (the shrine, in the north-west quarter) --------------------------
@@ -90,11 +87,8 @@ pub(super) fn place_donggung(world: &mut World, cx: i32, cz: i32, gy: i32) {
 /// filled exactly the space that does the work, and the yard is 33 blocks
 /// across — too narrow to stand one beside the hall instead.
 pub(super) fn place_taewonjeon(world: &mut World, cx: i32, cz: i32, gy: i32) {
-    const HALL_X: i32 = s(6);
-    const HALL_Z: i32 = s(4);
-
     compound_wall(world, cx, cz, gy, TAEWON_RX, TAEWON_RZ, false);
-    place_residence(world, cx, cz + TAEWON_HALL_Z, gy, HALL_X, HALL_Z, true);
+    place_residence(world, cx, cz + TAEWON_HALL_Z, gy, TAEWON_BODY_X, TAEWON_BODY_Z, true);
 }
 
 // --- 건청궁 (the king's private residence, behind the garden) ----------------
@@ -106,9 +100,6 @@ pub(super) fn place_taewonjeon(world: &mut World, cx: i32, cz: i32, gy: i32) {
 /// and behind the garden, which the king could live in away from all of it. So
 /// no 월대, no double roof, and the yard is generous rather than tight.
 pub(super) fn place_geoncheongung(world: &mut World, cx: i32, cz: i32, gy: i32) {
-    const HALL_X: i32 = s(5);
-    const HALL_Z: i32 = s(3);
-
     compound_wall(world, cx, cz, gy, GEONCHEONG_RX, GEONCHEONG_RZ, false);
 
     // Its gateway faces *west*, onto the garden path, rather than south like
@@ -121,8 +112,16 @@ pub(super) fn place_geoncheongung(world: &mut World, cx: i32, cz: i32, gy: i32) 
         }
     }
 
-    place_residence(world, cx, cz + JANGAN_Z, gy, HALL_X, HALL_Z, true);
-    place_residence(world, cx, cz + GONNYEONG_Z, gy, HALL_X, HALL_Z, true);
+    place_residence(world, cx, cz + JANGAN_Z, gy, GEONCHEONG_HALL_X, GEONCHEONG_HALL_Z, true);
+    place_residence(
+        world,
+        cx,
+        cz + GONNYEONG_Z,
+        gy,
+        GEONCHEONG_HALL_X,
+        GEONCHEONG_HALL_Z,
+        true,
+    );
 }
 
 /// 행각 — a long, low service range.
@@ -228,12 +227,9 @@ pub(super) fn place_sojubang(world: &mut World, cx: i32, cz: i32, gy: i32) {
 /// between them and three to each wall, which is the whole budget: build them
 /// at 침전 scale and the pair meets in the middle with no yard at all.
 pub(super) fn place_hamhwadang(world: &mut World, cx: i32, cz: i32, gy: i32) {
-    const HALL_X: i32 = s(2);
-    const HALL_Z: i32 = s(3);
-
     compound_wall(world, cx, cz, gy, HAMHWA_RX, HAMHWA_RZ, false);
-    place_residence(world, cx - HAMHWA_SPREAD, cz, gy, HALL_X, HALL_Z, true);
-    place_residence(world, cx + HAMHWA_SPREAD, cz, gy, HALL_X, HALL_Z, true);
+    place_residence(world, cx - HAMHWA_SPREAD, cz, gy, HAMHWA_HALL_X, HAMHWA_HALL_Z, true);
+    place_residence(world, cx + HAMHWA_SPREAD, cz, gy, HAMHWA_HALL_X, HAMHWA_HALL_Z, true);
 }
 
 /// 집옥재 — the library, east of 건청궁.

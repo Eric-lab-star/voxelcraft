@@ -261,7 +261,10 @@ pub(super) fn lay_paths(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // across it directly behind, so the way through turns off in front of the
     // hall, runs up its east flank clear of both, and comes back to the axis at
     // the pond — which is how you walk it in the real palace.
-    let round_x = cx + s(16);
+    // Far enough east to clear 아미산, which is `d(12)` wide. This was written
+    // as `s(16)` — a distance on the building scale — and survived only because
+    // the garden was narrow at the time. Widening it walled the path off.
+    let round_x = cx + d(14);
     let pond_z = cz + HYANGWON_Z + s(9);
     // The garden run carries on north past the turn to the bridge, because
     // 건청궁 is further up still and is entered off the side of it.
@@ -286,9 +289,9 @@ pub(super) fn lay_paths(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // broadside against the compound's south wall and spent its last ten blocks
     // buried under it, so on the ground it simply stopped at a wall.
     for (gate_x, gate_z) in [
-        (cx + JAGYEONG_X, cz + JAGYEONG_Z + s(11)),       // 자경전
+        (cx + JAGYEONG_X, cz + JAGYEONG_Z + SIDE_RZ),       // 자경전
         (cx + DONGGUNG_X, cz + DONGGUNG_Z + DONGGUNG_RZ), // 동궁
-        (cx + SUJEONG_X, cz + SUJEONG_Z + s(8)),          // 수정전
+        (cx + SUJEONG_X, cz + SUJEONG_Z + SIDE_RZ),          // 수정전
     ] {
         let approach = gate_z + s(4);
         pave(world, gy, cx, approach, gate_x, approach, Block::Road);
@@ -316,21 +319,27 @@ pub(super) fn lay_paths(world: &mut World, cx: i32, cz: i32, gy: i32) {
     pave(world, gy, cx - BYPASS_X, hh_approach, hh_x, hh_approach, Block::Road);
     pave(world, gy, hh_x, hh_approach, hh_x, hh_gate, Block::Road);
 
-    // 태원전, off the north end of the west flank. Its gateway is in the south
-    // face, so the spur runs out level with the flank's end and then turns up
-    // into it.
+    // 태원전, approached from below like every other compound — out along a
+    // latitude in the corridor between this yard and 함화당's, then up into the
+    // gateway.
+    //
+    // It used to run out level with the flank's north end instead, which worked
+    // only while that end happened to lie south of this yard. Deriving yards
+    // from their contents made 태원전's deeper, the two crossed over, and the
+    // spur began *inside* the compound and entered through a wall with no gate.
     let tw_x = cx + TAEWON_X;
     let tw_gate = cz + TAEWON_Z + TAEWON_RZ;
+    let tw_approach = tw_gate + s(2);
     pave(
         world,
         gy,
         cx - BYPASS_X,
-        flank_north,
+        tw_approach,
         tw_x,
-        flank_north,
+        tw_approach,
         Block::Road,
     );
-    pave(world, gy, tw_x, flank_north, tw_x, tw_gate, Block::Road);
+    pave(world, gy, tw_x, tw_approach, tw_x, tw_gate, Block::Road);
 
     // 경회루. Its pond fills the strip between the court's west cloister and
     // the precinct wall, and that cloister is unbroken down its whole length,

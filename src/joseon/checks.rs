@@ -264,9 +264,9 @@ fn every_hall_is_on_the_path_network() {
             cz + GEONCHEONG_Z,
         ),
         ("태원전", cx + TAEWON_X, cz + TAEWON_Z + TAEWON_RZ),
-        ("자경전", cx + JAGYEONG_X, cz + JAGYEONG_Z + s(11)),
+        ("자경전", cx + JAGYEONG_X, cz + JAGYEONG_Z + SIDE_RZ),
         ("동궁", cx + DONGGUNG_X, cz + DONGGUNG_Z + DONGGUNG_RZ),
-        ("수정전", cx + SUJEONG_X, cz + SUJEONG_Z + s(8)),
+        ("수정전", cx + SUJEONG_X, cz + SUJEONG_Z + SIDE_RZ),
         ("경회루", cx + GYEONGHOE_X + s(7), cz + GYEONGHOE_Z),
     ] {
         assert!(
@@ -587,5 +587,60 @@ fn every_signpost_stands_clear() {
             .filter(|(dx, dz)| !w.get(pos.x + dx, pos.y, pos.z + dz).blocks_movement())
             .count();
         assert!(open >= 2, "{name}: board is walled in ({open} sides open)");
+    }
+}
+
+/// No two walled compounds may overlap.
+///
+/// Yards are derived from what they hold now, so changing a hall's size moves
+/// its yard wall — and the compounds along each flank are packed closely enough
+/// that a few blocks of growth runs one into the next. That shows up as two
+/// yard walls crossing, which looks from inside like a wall that goes nowhere,
+/// and no other test here would notice it.
+#[test]
+fn no_two_compounds_overlap() {
+    let boxes: Vec<(&str, i32, i32, i32, i32)> = vec![
+        ("자경전", JAGYEONG_X, JAGYEONG_Z, SIDE_RX, SIDE_RZ),
+        ("수정전", SUJEONG_X, SUJEONG_Z, SIDE_RX, SIDE_RZ),
+        ("동궁", DONGGUNG_X, DONGGUNG_Z, DONGGUNG_RX, DONGGUNG_RZ),
+        ("태원전", TAEWON_X, TAEWON_Z, TAEWON_RX, TAEWON_RZ),
+        ("건청궁", GEONCHEONG_X, GEONCHEONG_Z, GEONCHEONG_RX, GEONCHEONG_RZ),
+        ("함화당", HAMHWA_X, HAMHWA_Z, HAMHWA_RX, HAMHWA_RZ),
+    ];
+    for (i, a) in boxes.iter().enumerate() {
+        for b in &boxes[i + 1..] {
+            let ox = (a.1 - a.3).max(b.1 - b.3) <= (a.1 + a.3).min(b.1 + b.3);
+            let oz = (a.2 - a.4).max(b.2 - b.4) <= (a.2 + a.4).min(b.2 + b.4);
+            assert!(
+                !(ox && oz),
+                "{} (x {}..{}, z {}..{}) overlaps {} (x {}..{}, z {}..{})",
+                a.0, a.1 - a.3, a.1 + a.3, a.2 - a.4, a.2 + a.4,
+                b.0, b.1 - b.3, b.1 + b.3, b.2 - b.4, b.2 + b.4,
+            );
+        }
+    }
+}
+
+/// Every hall must fit inside the yard around it with ground to spare.
+///
+/// 자경전 and 수정전 once had their platforms touching the yard wall on both
+/// sides, which is what prompted deriving yards from their contents. The check
+/// is what stops that returning.
+#[test]
+fn every_hall_has_room_in_its_yard() {
+    for (name, rx, rz, bx, bz, spread) in [
+        ("자경전", SIDE_RX, SIDE_RZ, SIDE_HALL_X, SIDE_HALL_Z, 0),
+        ("동궁", DONGGUNG_RX, DONGGUNG_RZ, DONGGUNG_HALL, DONGGUNG_HALL, BIHYEON_Z),
+        ("태원전", TAEWON_RX, TAEWON_RZ, TAEWON_BODY_X, TAEWON_BODY_Z, 0),
+        ("건청궁", GEONCHEONG_RX, GEONCHEONG_RZ, GEONCHEONG_HALL_X, GEONCHEONG_HALL_Z, GONNYEONG_Z),
+        ("함화당", HAMHWA_RX, HAMHWA_RZ, HAMHWA_HALL_X, HAMHWA_HALL_Z, 0),
+    ] {
+        let px = bx + s(2) + if spread == 0 { HAMHWA_SPREAD * 0 } else { 0 };
+        assert!(rx - px >= s(4), "{name}: only {} clear either side", rx - px);
+        assert!(
+            rz - (bz + s(2) + spread) >= s(4),
+            "{name}: only {} clear front and back",
+            rz - (bz + s(2) + spread)
+        );
     }
 }
