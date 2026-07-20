@@ -29,6 +29,13 @@ fn table() -> Vec<(i32, i32, &'static str)> {
     add(s(4), GEUMCHEON_Z + s(5), "영제교");
     add(s(4), COURT_OFFSET_Z + COURT_Z + s(3), "근정문");
     add(s(11), COURT_OFFSET_Z - s(2) + s(12) + 2, "근정전");
+    // The gates through the cross walls, each named for the yard it opens on.
+    // 근정문 and the outer gates already have boards; these are the three the
+    // axis passes through between the court and the queen's quarters.
+    add(s(3), SAJEONG_Z + s(12) - s(5), "사정문");
+    add(s(3), GANGNYEONG_Z + s(8) - 2, "향오문");
+    add(s(3), GYOTAE_Z + s(8) - 2, "양의문");
+
     add(s(9), SAJEONG_Z + s(4) + s(3), "사정전");
     add(s(9), GANGNYEONG_Z + s(4) + s(3), "강녕전");
     add(s(9), GYOTAE_Z + s(4) + s(3), "교태전");
