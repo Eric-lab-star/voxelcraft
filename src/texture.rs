@@ -399,8 +399,11 @@ fn roof_tile_pixel(x: usize, y: usize, n: f32) -> [u8; 4] {
         2 => [116, 122, 138], // crown, catching the light
         _ => [70, 76, 90],   // falling face
     };
-    // Courses overlap every 5 px down the slope; the lip casts a dark line.
-    if y % 5 == 0 {
+    // Courses overlap every 4 px down the slope; the lip casts a dark line.
+    // The period has to divide TILE: at 5 the lip landed on both the last row
+    // of a tile and the first row of the next, so a roof grew a doubled dark
+    // band every 16 px that no single tile ever showed.
+    if y % 4 == 0 {
         return shade([34, 38, 46], n, 8.0);
     }
     shade(base, n, 12.0)
@@ -642,6 +645,45 @@ pub fn block_tile(block: crate::block::Block, face: usize) -> u32 {
 mod preview {
     use super::*;
     use std::io::Write;
+
+    /// A tile that covers a continuous surface has to wrap. The failure this
+    /// guards is specific and easy to reintroduce: a tile draws a dark seam
+    /// line on a period that does not divide `TILE`, so the line lands on the
+    /// tile's last row *and* on the next copy's first row, and the surface
+    /// grows a doubled band every 16 pixels that no single tile shows.
+    ///
+    /// 기와 had exactly this — courses every 5px in a 16px tile — and it only
+    /// became obvious once the palace was scaled up and its roofs got big
+    /// enough to see a pattern in.
+    #[test]
+    fn continuous_tiles_wrap_without_doubling() {
+        for (name, tile) in [("기와", T_ROOF_TILE), ("화강암", T_GRANITE)] {
+            let row_mean = |y: usize| {
+                let s: u32 = (0..TILE)
+                    .map(|x| {
+                        let p = tile_pixel(tile, x, y);
+                        (p[0] as u32 + p[1] as u32 + p[2] as u32) / 3
+                    })
+                    .sum();
+                s as f32 / TILE as f32
+            };
+            let means: Vec<f32> = (0..TILE).map(row_mean).collect();
+            let avg = means.iter().sum::<f32>() / TILE as f32;
+            // A "seam row" is markedly darker than the tile as a whole.
+            let is_seam = |y: usize| means[y] < avg - 8.0;
+
+            // Walk the rows as they appear on a real surface: two copies
+            // stacked, so row TILE-1 is followed by row 0.
+            for y in 0..TILE {
+                let next = (y + 1) % TILE;
+                assert!(
+                    !(is_seam(y) && is_seam(next)),
+                    "{name}: rows {y} and {next} are both seam lines, so the \
+                     pattern doubles up where two tiles meet"
+                );
+            }
+        }
+    }
 
     /// The wave phase must actually move the surface, and the tile must stay
     /// seamless at any phase (opposite edges sample the same wrapped pattern).

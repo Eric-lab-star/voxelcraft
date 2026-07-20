@@ -25,6 +25,20 @@
 // x = atlas columns, y = atlas rows, z = half-texel inset, w = unused.
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> atlas_dims: vec4<f32>;
 
+// A stable value hash of a block cell -> [0,1). Mirrors `texture::hash` on the
+// CPU side so the two agree about what a given cell looks like.
+fn cell_hash(cell: vec2<f32>) -> f32 {
+    // Done entirely in u32: the mix relies on multiplication wrapping, and
+    // signed overflow is not something to lean on. `cell` is already integral
+    // (it comes from `floor`), so the bitcast is exact for negative cells too —
+    // and they do occur, since V runs *down* from world Y on side faces.
+    let p = vec2<i32>(cell);
+    var h = bitcast<u32>(p.x) * 374761393u + bitcast<u32>(p.y) * 668265263u;
+    h = (h ^ (h >> 13u)) * 1274126177u;
+    h = h ^ (h >> 16u);
+    return f32(h % 1000u) / 1000.0;
+}
+
 @fragment
 fn fragment(
     vertex_output: VertexOutput,
@@ -43,12 +57,36 @@ fn fragment(
     let tile = round(in.color.a);       // atlas tile index packed in alpha
     let col = tile % cols;
     let row = floor(tile / cols);
-    let local = fract(in.uv);           // [0,1] within the current tile
+    let cell = floor(in.uv);            // which block, in world coordinates
+    var local = fract(in.uv);           // [0,1] within the current tile
+
+    // Mirror the tile left-to-right on half the blocks. One 16x16 tile stamped
+    // identically across a wall reads as a grid from any distance, and the
+    // bigger the building the worse it gets — the palace at its new scale is
+    // wall after wall of the same stone. Mirroring costs nothing, needs no
+    // extra quads (which per-block *tile* variety would, since greedy meshing
+    // can only merge faces showing the same tile), and breaks the grid up
+    // because the seam between two blocks stops being a repeat.
+    //
+    // Only the U axis. Every tile here is drawn with a definite top — grass
+    // above dirt, the lip of a roof course, the lattice of a 창호 — so a
+    // vertical flip would turn them upside down.
+    let mirror = cell_hash(cell) < 0.5;
+    if mirror {
+        local.x = 1.0 - local.x;
+    }
+
     let u = (col + inset + local.x * (1.0 - 2.0 * inset)) / cols;
     let v = (row + inset + local.y * (1.0 - 2.0 * inset)) / rows;
     in.uv = vec2<f32>(u, v);
-    // Drop the packed tile index so it can't tint/blend the shaded colour.
-    in.color = vec4<f32>(in.color.rgb, 1.0);
+
+    // A little per-block brightness jitter on top. The mirror breaks up the
+    // pattern; this breaks up the flatness, so a large plastered wall or a
+    // granite terrace stops reading as one poster-flat surface. Kept small —
+    // past a few percent it stops looking like stone and starts looking like
+    // the blocks are lit differently.
+    let jitter = 1.0 + (cell_hash(cell + 17.0) - 0.5) * 0.09;
+    in.color = vec4<f32>(in.color.rgb * jitter, 1.0);
     // ----------------------------------------------------------------------
 
     var pbr_input = pbr_input_from_standard_material(in, is_front);

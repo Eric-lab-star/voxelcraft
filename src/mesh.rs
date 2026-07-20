@@ -324,13 +324,16 @@ impl MeshBuf {
         // Y, so flip it to put the tile's top at the block's top. Top/bottom
         // faces (a == 1) are flat, no flip needed.
         let flip_v = fa.a != 1;
+        // Anchored to world coordinates rather than to the quad's own corner.
+        // Both tile identically — the quad bounds are whole blocks, so the
+        // fractional part is the same either way — but only this way does
+        // `floor(uv)` name the *block*, which is what lets the shader vary a
+        // tile per block. Anchored to the quad, that index would shift whenever
+        // greedy meshing merged differently, and the whole wall would visibly
+        // reshuffle the moment you placed a block beside it.
         let repeat = |uu: i32, vv: i32| -> [f32; 2] {
-            let ur = (uu - u0) as f32;
-            let vr = if flip_v {
-                (v1 - vv) as f32
-            } else {
-                (vv - v0) as f32
-            };
+            let ur = uu as f32;
+            let vr = if flip_v { -(vv as f32) } else { vv as f32 };
             [ur, vr]
         };
         let uv = [
