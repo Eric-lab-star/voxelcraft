@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use crate::chunk::DirtyChunks;
 use crate::menu::Toast;
-use crate::world::{World, CHUNK_SIZE, WORLD_X, WORLD_Z};
+use crate::world::{MapKind, World, CHUNK_SIZE, WORLD_X, WORLD_Z};
 
 /// How many save slots exist.
 pub const NUM_SLOTS: usize = 3;
@@ -38,17 +38,38 @@ pub fn save_world(world: &World, slot: usize) -> bool {
 /// whether a valid save was loaded.
 pub fn load_world(world: &mut World, dirty: &mut DirtyChunks, slot: usize) -> bool {
     match World::load(&slot_path(slot)) {
-        Some(loaded) => {
-            *world = loaded;
-            for cz in 0..(WORLD_Z / CHUNK_SIZE) {
-                for cx in 0..(WORLD_X / CHUNK_SIZE) {
-                    dirty.0.insert((cx, cz));
-                }
+        Some(mut loaded) => {
+            // A save written before plants existed has none anywhere; scatter
+            // them once so an old world still gets its meadows. `decorate` only
+            // fills air above grass, so nothing already built is disturbed, and
+            // after the next save the world has plants and this never fires for
+            // it again — so plants the player pulled up stay gone.
+            if !loaded.has_plants() {
+                loaded.decorate(1337);
             }
+            *world = loaded;
+            mark_all_dirty(dirty);
             info!("world loaded from slot {slot}");
             true
         }
         None => false,
+    }
+}
+
+/// Replace the world with a freshly generated map of `kind`.
+pub fn new_world(world: &mut World, dirty: &mut DirtyChunks, kind: MapKind, seed: u32) {
+    *world = World::generate(kind, seed);
+    mark_all_dirty(dirty);
+    info!("generated a new {:?} world", kind);
+}
+
+/// Queue every chunk for a rebuild — needed whenever the world is wholesale
+/// replaced rather than edited a block at a time.
+fn mark_all_dirty(dirty: &mut DirtyChunks) {
+    for cz in 0..(WORLD_Z / CHUNK_SIZE) {
+        for cx in 0..(WORLD_X / CHUNK_SIZE) {
+            dirty.0.insert((cx, cz));
+        }
     }
 }
 

@@ -7,16 +7,19 @@
 //!   Shift        dive
 //!   Space Space  toggle flight (developer mode) — then Space up, Shift down
 //!   Left click   break block
-//!   Right click  place block (stone)
+//!   Right click  place the selected block
+//!   1-0 / wheel  pick a hotbar slot
+//!   Tab          pause menu (save / load / quit)
 //!   Escape       release / recapture the mouse cursor
 
 mod block;
 mod chunk;
 mod clouds;
 mod daynight;
+mod font;
 mod hotbar;
 mod interaction;
-mod font;
+mod joseon;
 mod menu;
 mod mesh;
 mod particles;
@@ -47,12 +50,12 @@ fn main() {
                 // Nearest-neighbour sampling keeps the pixel-art textures crisp.
                 .set(ImagePlugin::default_nearest()),
         )
-        // Registers the greedy-mesh terrain material + its embedded shader.
-        .add_plugins(voxel_material::VoxelMaterialPlugin)
-        // Registers the Gerstner-wave water material + its embedded shader.
         // Swaps in a Hangul-capable UI font. Must come after `DefaultPlugins`,
         // which is what creates the font assets it replaces.
         .add_plugins(font::FontPlugin)
+        // Registers the greedy-mesh terrain material + its embedded shader.
+        .add_plugins(voxel_material::VoxelMaterialPlugin)
+        // Registers the Gerstner-wave water material + its embedded shader.
         .add_plugins(water_material::WaterMaterialPlugin)
         .insert_resource(ClearColor(Color::srgb(0.53, 0.74, 0.92)))
         // Lower ambient so the sun and the per-face shading create real

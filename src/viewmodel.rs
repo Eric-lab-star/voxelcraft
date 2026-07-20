@@ -121,9 +121,14 @@ pub fn setup_viewmodel(
     camera: Query<Entity, With<Player>>,
 ) {
     // The held block: the atlas texture, shaded per-face by baked vertex colours.
+    // Masked, because plant tiles are mostly transparent — held opaque, a flower
+    // would come out as a black box with a flower painted on it.
     let held_mat = materials.add(StandardMaterial {
         base_color: Color::WHITE,
         base_color_texture: Some(atlas.image.clone()),
+        alpha_mode: AlphaMode::Mask(0.5),
+        cull_mode: None,
+        double_sided: true,
         ..default()
     });
 
@@ -546,10 +551,19 @@ const FACE_CORNERS: [[[f32; 3]; 4]; 6] = [
 /// Same directional shading the terrain uses, so the held block matches it.
 const FACE_SHADE: [f32; 6] = [0.65, 0.65, 0.5, 1.0, 0.8, 0.8];
 
-/// Build a centred unit cube textured with `block`'s atlas tiles, with per-face
-/// shading baked into vertex colours.
+/// Build the mesh shown in the hand for `block`: a textured unit cube, with
+/// per-face shading baked into vertex colours.
+///
+/// Plants are flat in the world and flat in the hand — a cube of crossed grass
+/// would look like a solid green brick. Squashing the cube to a slab keeps the
+/// tile readable from the side without needing separate geometry.
 fn block_cube_mesh(block: Block) -> Mesh {
-    build_cube(Vec3::ONE, |f| Some(block_tile(block, f)), [1.0; 3])
+    let size = if block.is_plant() {
+        Vec3::new(1.0, 1.0, 0.06)
+    } else {
+        Vec3::ONE
+    };
+    build_cube(size, |f| Some(block_tile(block, f)), [1.0; 3])
 }
 
 fn build_cube(size: Vec3, tile_of: impl Fn(usize) -> Option<u32>, tint: [f32; 3]) -> Mesh {

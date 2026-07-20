@@ -21,6 +21,7 @@ use crate::block::Block;
 use crate::texture::{atlas_uv, block_tile};
 use crate::world::{World, CHUNK_SIZE, WORLD_Y};
 use bevy::asset::RenderAssetUsages;
+use bevy::math::{IVec3, Vec3};
 use bevy::prelude::Mesh;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 
@@ -104,9 +105,11 @@ const FACE_SHADE: [f32; 6] = [0.65, 0.65, 0.5, 1.0, 0.8, 0.8];
 /// Brightness for the four ambient-occlusion levels (0 = deepest corner).
 const AO_FACTOR: [f32; 4] = [0.4, 0.62, 0.82, 1.0];
 
-/// A block is *opaque* if it's solid and not water.
+/// A block is *opaque* if it's solid and not water. Plants are cutout crosses
+/// that fill none of their cell, so they neither cull their neighbours' faces
+/// nor cast ambient occlusion.
 fn is_opaque(block: Block) -> bool {
-    block.is_solid() && block != Block::Water
+    block.is_solid() && block != Block::Water && !block.is_plant()
 }
 
 /// Ambient occlusion for the four corners of one voxel face, in the greedy
@@ -228,6 +231,63 @@ impl MeshBuf {
         }
     }
 
+    /// Emit the two crossed quads that make up one plant, with atlas UVs baked
+    /// in (the plant material samples the atlas directly, no tiling).
+    ///
+    /// Both quads get an *up* normal rather than their true facing. A cross has
+    /// no meaningful surface direction, and with real normals one arm of every
+    /// tuft would face away from the sun and go black while its twin stayed lit
+    /// — the plant would visibly flicker as you walked around it. Facing them all
+    /// up lights the whole cross evenly, the way Minecraft does.
+    fn push_plant_cross(&mut self, wx: i32, wy: i32, wz: i32, tile: u32, height: f32) {
+        // The quads run corner to corner, so their width is the cell *diagonal*,
+        // not its side: spanning the full cell would make every plant √2 blocks
+        // wide and read as oversized. Work back from the width we actually want.
+        let half = PLANT_WIDTH / (2.0 * std::f32::consts::SQRT_2);
+        let (lo, hi) = (0.5 - half, 0.5 + half);
+        // Jitter each plant within its cell so a meadow doesn't read as a grid of
+        // identical sprites.
+        let (jx, jz) = plant_jitter(wx, wz);
+
+        // Two quads on the cell's diagonals, each listed bottom-left,
+        // bottom-right, top-right, top-left.
+        let quads = [
+            [
+                [lo, 0.0, lo],
+                [hi, 0.0, hi],
+                [hi, height, hi],
+                [lo, height, lo],
+            ],
+            [
+                [lo, 0.0, hi],
+                [hi, 0.0, lo],
+                [hi, height, lo],
+                [lo, height, hi],
+            ],
+        ];
+        // v=0 is the top of the tile, so the top corners take v=0.
+        let corner_uv = [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
+
+        for quad in quads {
+            let start = self.positions.len() as u32;
+            for (ci, corner) in quad.iter().enumerate() {
+                self.positions.push([
+                    wx as f32 + corner[0] + jx,
+                    wy as f32 + corner[1],
+                    wz as f32 + corner[2] + jz,
+                ]);
+                self.normals.push([0.0, 1.0, 0.0]);
+                self.uvs.push(atlas_uv(tile, corner_uv[ci][0], corner_uv[ci][1]));
+                // Full brightness, no face shading or AO: a cross has no face to
+                // shade, and darkening one would just look like dirt on it.
+                self.colors.push([1.0, 1.0, 1.0, 1.0]);
+            }
+            // The material is double-sided, so winding only has to be consistent.
+            self.indices
+                .extend_from_slice(&[start, start + 1, start + 2, start, start + 2, start + 3]);
+        }
+    }
+
     /// Emit one greedy quad for the opaque mesh. The quad spans world voxel
     /// range `[u0,u1) × [v0,v1)` on axis-`a` plane `plane`. UVs are *repeat*
     /// coordinates (one unit per block); the terrain shader turns them into
@@ -328,25 +388,65 @@ impl MeshBuf {
     }
 }
 
-/// The two meshes for a chunk column. Either may be `None` if empty.
+/// Horizontal width of a plant's crossed quads, in blocks. Kept under 1 so the
+/// sprite stays inside its own cell — see `push_plant_cross`.
+const PLANT_WIDTH: f32 = 0.72;
+
+/// The tight world-space bounds of the plant at `p` as `(centre, size)`.
+///
+/// Lives next to the geometry that defines it so the aim highlight can't drift
+/// out of step with the mesh — the jitter and the diagonal-vs-side distinction
+/// are both easy to get wrong from the outside.
+pub fn plant_bounds(p: IVec3, block: Block) -> (Vec3, Vec3) {
+    let (jx, jz) = plant_jitter(p.x, p.z);
+    let height = block.plant_height();
+    // The two quads run corner to corner between `lo` and `hi` on both X and Z,
+    // so the box that contains them has sides of `hi - lo` = width / √2 — not
+    // the width itself, which measures the diagonal.
+    let side = PLANT_WIDTH / std::f32::consts::SQRT_2;
+    let centre = Vec3::new(
+        p.x as f32 + 0.5 + jx,
+        p.y as f32 + height * 0.5,
+        p.z as f32 + 0.5 + jz,
+    );
+    // A hair of margin so the outline clears the sprite instead of z-fighting
+    // the quad corners it touches.
+    (centre, Vec3::new(side, height, side) * 1.04)
+}
+
+/// A stable per-cell offset in [-0.15, 0.15] on X and Z, so neighbouring plants
+/// don't all sit dead centre in their cells.
+fn plant_jitter(wx: i32, wz: i32) -> (f32, f32) {
+    let mut h = (wx.wrapping_mul(374761393) ^ wz.wrapping_mul(668265263)) as u32;
+    h = (h ^ (h >> 13)).wrapping_mul(1274126177);
+    h ^= h >> 16;
+    let unit = |v: u32| (v % 1000) as f32 / 1000.0 - 0.5;
+    (unit(h) * 0.3, unit(h >> 8) * 0.3)
+}
+
+/// The three meshes for a chunk column. Any may be `None` if empty.
 pub struct ChunkMeshes {
     pub opaque: Option<Mesh>,
     pub water: Option<Mesh>,
+    pub plants: Option<Mesh>,
 }
 
 pub fn build_chunk_meshes(world: &World, cx: i32, cz: i32) -> ChunkMeshes {
     let mut opaque = MeshBuf::default();
     let mut water = MeshBuf::default();
+    let mut plants = MeshBuf::default();
 
     let ox = cx * CHUNK_SIZE;
     let oz = cz * CHUNK_SIZE;
 
     build_opaque(world, &mut opaque, ox, oz);
     build_water(world, &mut water, ox, oz);
+    build_plants(world, &mut plants, ox, oz);
 
     ChunkMeshes {
         opaque: opaque.into_mesh(),
         water: water.into_mesh(),
+        plants: plants.into_mesh(),
     }
 }
 
@@ -468,6 +568,24 @@ fn merge_mask(
                 }
             }
             iu += w;
+        }
+    }
+}
+
+/// Build the cross-quad mesh for every plant in a chunk column.
+fn build_plants(world: &World, buf: &mut MeshBuf, ox: i32, oz: i32) {
+    for ly in 0..WORLD_Y {
+        for lz in 0..CHUNK_SIZE {
+            for lx in 0..CHUNK_SIZE {
+                let (wx, wy, wz) = (ox + lx, ly, oz + lz);
+                let block = world.get(wx, wy, wz);
+                if !block.is_plant() {
+                    continue;
+                }
+                // Face 0 is arbitrary — every face of a plant is the same tile.
+                let tile = block_tile(block, 0);
+                buf.push_plant_cross(wx, wy, wz, tile, block.plant_height());
+            }
         }
     }
 }

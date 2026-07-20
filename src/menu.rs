@@ -5,22 +5,42 @@ use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use crate::chunk::DirtyChunks;
-use crate::save::{load_world, save_world, slot_exists, NUM_SLOTS};
-use crate::world::World;
+use crate::font::PIXEL_GRID;
+use crate::player::Player;
+use crate::save::{load_world, new_world, save_world, slot_exists, NUM_SLOTS};
+use crate::world::{MapKind, World};
 
 const NORMAL: Color = Color::srgb(0.22, 0.22, 0.28);
 const HOVER: Color = Color::srgb(0.32, 0.32, 0.42);
 const EMPTY: Color = Color::srgb(0.15, 0.15, 0.18);
 
+/// Which screen the game is on. The title screen is shown over an already-built
+/// world, so picking a map only has to regenerate it — there is no separate
+/// "no world yet" state to handle.
+#[derive(Resource, Default, PartialEq, Eq, Clone, Copy)]
+pub enum Screen {
+    #[default]
+    Title,
+    Playing,
+}
+
 /// Whether the pause menu is open.
 #[derive(Resource, Default)]
 pub struct MenuState {
     pub open: bool,
+    pub screen: Screen,
 }
 
-/// Run condition: gameplay only ticks while the menu is closed.
+impl MenuState {
+    /// Should the cursor be free for clicking UI?
+    fn ui_focused(&self) -> bool {
+        self.open || self.screen == Screen::Title
+    }
+}
+
+/// Run condition: gameplay only ticks in-world, with the pause menu closed.
 pub fn game_active(menu: Res<MenuState>) -> bool {
-    !menu.open
+    !menu.ui_focused()
 }
 
 /// A short-lived on-screen message.
@@ -41,6 +61,9 @@ impl Toast {
 pub struct MenuRoot;
 
 #[derive(Component)]
+pub struct TitleRoot;
+
+#[derive(Component)]
 pub struct ToastText;
 
 /// A menu button and what it does.
@@ -48,6 +71,10 @@ pub struct ToastText;
 pub enum MenuButton {
     Save(usize),
     Load(usize),
+    /// Generate and enter a fresh map.
+    NewMap(MapKind),
+    /// Resume from save slot 1 and enter the world.
+    Continue,
     Quit,
 }
 
@@ -65,12 +92,48 @@ pub fn setup_menu(mut commands: Commands) {
             row.spawn((
                 Text::new(""),
                 TextFont {
-                    font_size: FontSize::Px(26.0),
+                    font_size: FontSize::Px(PIXEL_GRID * 2.0),
                     ..default()
                 },
                 TextColor(Color::srgba(1.0, 1.0, 1.0, 0.0)),
                 ToastText,
             ));
+        });
+
+    // The title screen. Nearly opaque, and above the pause menu, so the world
+    // already built underneath reads as a backdrop rather than as live gameplay.
+    commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                position_type: PositionType::Absolute,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.04, 0.05, 0.08, 0.94)),
+            GlobalZIndex(20),
+            TitleRoot,
+        ))
+        .with_children(|root| {
+            root.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                row_gap: Val::Px(14.0),
+                ..default()
+            })
+            .with_children(|panel| {
+                title(panel, "voxelcraft", PIXEL_GRID * 4.0);
+                title(panel, "지도를 고르세요", PIXEL_GRID * 2.0);
+                for kind in [MapKind::Meadow, MapKind::Joseon, MapKind::Flat] {
+                    button(panel, MenuButton::NewMap(kind), kind.label(), 260.0, NORMAL);
+                }
+                // Greyed when there's nothing to resume.
+                let bg = if slot_exists(1) { NORMAL } else { EMPTY };
+                button(panel, MenuButton::Continue, "이어하기", 260.0, bg);
+                button(panel, MenuButton::Quit, "Quit", 260.0, NORMAL);
+            });
         });
 
     // The pause menu overlay.
@@ -101,10 +164,10 @@ pub fn setup_menu(mut commands: Commands) {
                 BackgroundColor(Color::srgba(0.08, 0.08, 0.11, 0.96)),
             ))
             .with_children(|panel| {
-                title(panel, "voxelcraft", 34.0);
-                title(panel, "Save", 20.0);
+                title(panel, "voxelcraft", PIXEL_GRID * 3.0);
+                title(panel, "Save", PIXEL_GRID * 2.0);
                 slot_row(panel, true);
-                title(panel, "Load", 20.0);
+                title(panel, "Load", PIXEL_GRID * 2.0);
                 slot_row(panel, false);
                 // Quit
                 button(panel, MenuButton::Quit, "Quit", 210.0, NORMAL);
@@ -175,7 +238,7 @@ fn button(
             b.spawn((
                 Text::new(label),
                 TextFont {
-                    font_size: FontSize::Px(20.0),
+                    font_size: FontSize::Px(PIXEL_GRID * 2.0),
                     ..default()
                 },
                 TextColor(Color::WHITE),
@@ -194,13 +257,14 @@ pub fn toggle_menu(keys: Res<ButtonInput<KeyCode>>, mut menu: ResMut<MenuState>)
 pub fn apply_menu_state(
     menu: Res<MenuState>,
     mut cursors: Query<&mut CursorOptions, With<PrimaryWindow>>,
-    mut root: Query<&mut Visibility, With<MenuRoot>>,
+    mut root: Query<&mut Visibility, (With<MenuRoot>, Without<TitleRoot>)>,
+    mut title_root: Query<&mut Visibility, With<TitleRoot>>,
 ) {
     if !menu.is_changed() {
         return;
     }
     if let Ok(mut cursor) = cursors.single_mut() {
-        if menu.open {
+        if menu.ui_focused() {
             cursor.grab_mode = CursorGrabMode::None;
             cursor.visible = true;
         } else {
@@ -215,6 +279,13 @@ pub fn apply_menu_state(
             Visibility::Hidden
         };
     }
+    for mut vis in &mut title_root {
+        *vis = if menu.screen == Screen::Title {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
 }
 
 pub fn menu_button_actions(
@@ -224,10 +295,27 @@ pub fn menu_button_actions(
     mut exit: MessageWriter<AppExit>,
     mut world: ResMut<World>,
     mut dirty: ResMut<DirtyChunks>,
+    mut players: Query<&mut Player>,
 ) {
     for (interaction, kind, mut bg) in &mut buttons {
         match *interaction {
             Interaction::Pressed => match kind {
+                MenuButton::NewMap(map) => {
+                    new_world(&mut world, &mut dirty, *map, 1337);
+                    respawn(&mut players, &world);
+                    menu.screen = Screen::Playing;
+                    menu.open = false;
+                    toast.show(format!("{} 지도를 만들었습니다", map.label()));
+                }
+                MenuButton::Continue => {
+                    if load_world(&mut world, &mut dirty, 1) {
+                        respawn(&mut players, &world);
+                        menu.screen = Screen::Playing;
+                        menu.open = false;
+                    } else {
+                        toast.show("저장된 월드가 없습니다");
+                    }
+                }
                 MenuButton::Save(slot) => {
                     if save_world(&world, *slot) {
                         toast.show(format!("Saved to slot {slot}"));
@@ -248,14 +336,27 @@ pub fn menu_button_actions(
             },
             Interaction::Hovered => *bg = BackgroundColor(HOVER),
             Interaction::None => {
-                // Keep empty load-slots visually distinct even when not hovered.
+                // Keep buttons that would do nothing visually distinct even when
+                // not hovered.
                 let base = match kind {
                     MenuButton::Load(slot) if !slot_exists(*slot) => EMPTY,
+                    MenuButton::Continue if !slot_exists(1) => EMPTY,
                     _ => NORMAL,
                 };
                 *bg = BackgroundColor(base);
             }
         }
+    }
+}
+
+/// Drop the player onto the new world's spawn point. Without this they keep the
+/// coordinates they had in the previous map and can end up buried in a mountain
+/// or falling out of the sky.
+fn respawn(players: &mut Query<&mut Player>, world: &World) {
+    let spawn = world.find_spawn();
+    for mut player in players.iter_mut() {
+        player.center = spawn;
+        player.velocity = Vec3::ZERO;
     }
 }
 

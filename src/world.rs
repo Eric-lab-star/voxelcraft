@@ -30,6 +30,34 @@ pub const PLAY_MARGIN: i32 = 32;
 /// no water. Lower value = smaller puddles.
 pub const WATER_SOURCE: u8 = 5;
 
+/// Which map to generate. Each is a whole landscape recipe, not a biome inside
+/// one world — picking one regenerates everything.
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MapKind {
+    /// Rolling hills, lakes, oaks and wildflowers — the original world.
+    Meadow,
+    /// 조선 — ridged Korean mountains, terraced rice paddies, pine woods and a
+    /// hanok village.
+    Joseon,
+    /// 빈 터 — a bare level plain. Nothing is generated on it at all: no trees,
+    /// no plants, no water, no buildings. A blank canvas to build on.
+    Flat,
+}
+
+impl MapKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            MapKind::Meadow => "초원",
+            MapKind::Joseon => "조선",
+            MapKind::Flat => "빈 터",
+        }
+    }
+}
+
+/// Ground level of the [`MapKind::Flat`] map. Deliberately above `SEA_LEVEL` so
+/// the plain is dry land and [`World::find_spawn`] can stand you on it.
+pub const FLAT_LEVEL: i32 = SEA_LEVEL + 8;
+
 #[derive(Resource)]
 pub struct World {
     blocks: Vec<Block>,
@@ -38,13 +66,55 @@ pub struct World {
 }
 
 impl World {
-    /// Generate a fresh world with rolling hills, water, beaches, and a few trees.
-    pub fn generate(seed: u32) -> Self {
+    /// An empty world of the standard dimensions, ready to be filled in.
+    pub fn empty() -> Self {
         let n = (WORLD_X * WORLD_Y * WORLD_Z) as usize;
-        let mut world = World {
+        World {
             blocks: vec![Block::Air; n],
             levels: vec![0; n],
-        };
+        }
+    }
+
+    /// Generate a fresh world of the given kind.
+    pub fn generate(kind: MapKind, seed: u32) -> Self {
+        match kind {
+            MapKind::Meadow => Self::generate_meadow(seed),
+            MapKind::Joseon => crate::joseon::generate(seed),
+            MapKind::Flat => Self::generate_flat(),
+        }
+    }
+
+    /// A featureless level plain: stone, a little dirt, grass on top. No
+    /// `decorate` pass and no terrain noise — the point is that nothing is here
+    /// but the ground you build on.
+    fn generate_flat() -> Self {
+        let mut world = World::empty();
+        world.fill_flat(FLAT_LEVEL);
+        world
+    }
+
+    /// Fill the whole map with a level plain topped out at `level`. Shared by
+    /// the blank map and the Joseon map, which both build on flat ground.
+    pub fn fill_flat(&mut self, level: i32) {
+        for z in 0..WORLD_Z {
+            for x in 0..WORLD_X {
+                for y in 0..=level {
+                    let block = if y == level {
+                        Block::Grass
+                    } else if y >= level - 3 {
+                        Block::Dirt
+                    } else {
+                        Block::Stone
+                    };
+                    self.set(x, y, z, block);
+                }
+            }
+        }
+    }
+
+    /// Rolling hills, water, beaches, and a few trees.
+    fn generate_meadow(seed: u32) -> Self {
+        let mut world = World::empty();
 
         let terrain = Perlin::new(seed);
         let detail = Perlin::new(seed.wrapping_add(1));
@@ -89,7 +159,54 @@ impl World {
             }
         }
 
+        world.decorate(seed);
         world
+    }
+
+    /// Scatter grass tufts and flowers over any bare grass. Runs after the
+    /// terrain and trees, and only ever writes into `Air` directly above a
+    /// supporting block, so it can never carve into terrain, a tree, or anything
+    /// the player has built — which also makes it safe to run on a world loaded
+    /// from an older save that predates plants.
+    pub fn decorate(&mut self, seed: u32) {
+        for z in 0..WORLD_Z {
+            for x in 0..WORLD_X {
+                let y = self.surface_y(x, z);
+                if y < 0 || y >= WORLD_Y - 1 {
+                    continue;
+                }
+                // Grass only, and only above the waterline: no flowers on the
+                // seabed or poking out of a lake.
+                if self.get(x, y, z) != Block::Grass || y <= SEA_LEVEL {
+                    continue;
+                }
+                if self.get(x, y + 1, z) != Block::Air {
+                    continue;
+                }
+
+                // Two independent rolls, so flowers aren't merely rare grass:
+                // they thin out in their own patches.
+                let r = pseudo_random(x, z, seed.wrapping_add(101));
+                let block = if r < 0.03 {
+                    if pseudo_random(x, z, seed.wrapping_add(202)) < 0.5 {
+                        Block::RedFlower
+                    } else {
+                        Block::YellowFlower
+                    }
+                } else if r < 0.28 {
+                    Block::TallGrass
+                } else {
+                    continue;
+                };
+                self.set(x, y + 1, z, block);
+            }
+        }
+    }
+
+    /// Does the world contain any plants at all? Used once at startup to decide
+    /// whether a loaded save predates them and wants decorating.
+    pub fn has_plants(&self) -> bool {
+        self.blocks.iter().any(|b| b.is_plant())
     }
 
     fn place_tree(&mut self, x: i32, base_y: i32, z: i32) {
@@ -176,13 +293,16 @@ impl World {
     }
 
     /// Set a cell's water level directly (used by the flow simulation). Only
-    /// affects water/air cells; solids are left alone. `level == 0` clears the
-    /// water back to air.
+    /// affects water/air/plant cells; solids are left alone. `level == 0` clears
+    /// the water back to air.
+    ///
+    /// Water washing over a plant destroys it, as in Minecraft. Without this the
+    /// flow would treat a flower as a wall and refuse to spread through it.
     pub fn set_water_level(&mut self, x: i32, y: i32, z: i32, level: u8) -> bool {
         match Self::index(x, y, z) {
             Some(i) => {
                 let b = self.blocks[i];
-                if b != Block::Water && b != Block::Air {
+                if b != Block::Water && b != Block::Air && !b.is_plant() {
                     return false;
                 }
                 let new_block = if level > 0 { Block::Water } else { Block::Air };
@@ -244,11 +364,53 @@ impl World {
     }
 }
 
-/// Cheap deterministic hash -> [0,1). Used to scatter trees without an RNG.
-fn pseudo_random(x: i32, z: i32, seed: u32) -> f64 {
-    let mut h = seed as u64;
-    h = h.wrapping_mul(6364136223846793005).wrapping_add(x as u64);
-    h = h.wrapping_mul(6364136223846793005).wrapping_add(z as u64);
-    h ^= h >> 33;
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The flat map is a blank canvas: ground and nothing else. No decorate
+    /// pass, no trees, no water — if any of those ever leak into it, the point
+    /// of the map is gone.
+    #[test]
+    fn flat_map_is_empty() {
+        let w = World::generate(MapKind::Flat, 1);
+        for z in (0..WORLD_Z).step_by(7) {
+            for x in (0..WORLD_X).step_by(7) {
+                for y in 0..WORLD_Y {
+                    let b = w.get(x, y, z);
+                    let expected = if y > FLAT_LEVEL {
+                        Block::Air
+                    } else if y == FLAT_LEVEL {
+                        Block::Grass
+                    } else if y >= FLAT_LEVEL - 3 {
+                        Block::Dirt
+                    } else {
+                        Block::Stone
+                    };
+                    assert_eq!(b, expected, "unexpected {b:?} at ({x},{y},{z})");
+                }
+            }
+        }
+        // And you have to be able to stand on it.
+        let spawn = w.find_spawn();
+        assert_eq!(spawn.y, FLAT_LEVEL as f32 + 1.9, "spawn is not on the plain");
+    }
+}
+
+/// Cheap deterministic hash -> [0,1). Used to scatter trees and plants without
+/// an RNG.
+///
+/// The mix matters more than it looks. An LCG-style `h = h*K + x; h = h*K + z`
+/// leaves `z` barely stirred into the low bits, and `% 10_000` reads exactly
+/// those — so for a fixed `x` the result marched smoothly with `z` and every
+/// scatter came out in vertical stripes. Multiplying each coordinate by its own
+/// large odd constant and avalanching afterwards decorrelates the axes.
+pub(crate) fn pseudo_random(x: i32, z: i32, seed: u32) -> f64 {
+    let mut h = (x as u32)
+        .wrapping_mul(374761393)
+        ^ (z as u32).wrapping_mul(668265263)
+        ^ seed.wrapping_mul(2654435761);
+    h = (h ^ (h >> 13)).wrapping_mul(1274126177);
+    h ^= h >> 16;
     (h % 10_000) as f64 / 10_000.0
 }

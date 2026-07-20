@@ -8,7 +8,7 @@ use crate::player::Player;
 use crate::texture::BlockAtlas;
 use crate::voxel_material::{TerrainMaterial, VoxelExtension};
 use crate::water_material::{WaterExtension, WaterMaterial};
-use crate::world::{World, CHUNK_SIZE, WORLD_X, WORLD_Z};
+use crate::world::{MapKind, World, CHUNK_SIZE, WORLD_X, WORLD_Z};
 use bevy::pbr::Material;
 use bevy::prelude::*;
 
@@ -17,6 +17,7 @@ use bevy::prelude::*;
 pub struct ChunkPair {
     pub opaque: Option<Entity>,
     pub water: Option<Entity>,
+    pub plants: Option<Entity>,
 }
 
 /// Maps chunk coordinates -> its render entities.
@@ -33,6 +34,7 @@ pub struct DirtyChunks(pub HashSet<(i32, i32)>);
 pub struct ChunkMaterials {
     pub terrain: Handle<TerrainMaterial>,
     pub water: Handle<WaterMaterial>,
+    pub plants: Handle<StandardMaterial>,
 }
 
 /// Convert a world block X/Z to its chunk coordinate.
@@ -45,11 +47,13 @@ pub fn setup_world(
     mut meshes: ResMut<Assets<Mesh>>,
     mut terrain_materials: ResMut<Assets<TerrainMaterial>>,
     mut water_materials: ResMut<Assets<WaterMaterial>>,
+    mut plant_materials: ResMut<Assets<StandardMaterial>>,
     atlas: Res<BlockAtlas>,
 ) {
-    // Resume slot 1 if it exists, otherwise generate a fresh one.
-    let world =
-        World::load(&crate::save::slot_path(1)).unwrap_or_else(|| World::generate(1337));
+    // The title screen is drawn over a real world, so we always need one built
+    // by the time it appears. Generate the meadow: it is the cheapest map and
+    // makes a fine backdrop, and whichever map the player picks replaces it.
+    let world = World::generate(MapKind::Meadow, 1337);
 
     let terrain = terrain_materials.add(TerrainMaterial {
         base: StandardMaterial {
@@ -86,7 +90,25 @@ pub fn setup_world(
         },
         extension: WaterExtension::new(),
     });
-    let mats = ChunkMaterials { terrain, water };
+    // Plants: plain PBR, no custom shader — the mesh bakes atlas UVs directly, so
+    // there is nothing to tile. `Mask` is the whole point: it discards the
+    // transparent pixels outright rather than blending them, which keeps the
+    // cutout crisp and, unlike `Blend`, needs no back-to-front sorting — crossed
+    // quads inside one mesh could never be sorted correctly anyway.
+    let plants = plant_materials.add(StandardMaterial {
+        base_color: Color::WHITE,
+        base_color_texture: Some(atlas.image.clone()),
+        alpha_mode: AlphaMode::Mask(0.5),
+        perceptual_roughness: 0.95,
+        cull_mode: None,
+        double_sided: true,
+        ..default()
+    });
+    let mats = ChunkMaterials {
+        terrain,
+        water,
+        plants,
+    };
 
     let chunks_x = WORLD_X / CHUNK_SIZE;
     let chunks_z = WORLD_Z / CHUNK_SIZE;
@@ -96,7 +118,7 @@ pub fn setup_world(
         for cx in 0..chunks_x {
             let built = build_chunk_meshes(&world, cx, cz);
             let pair = spawn_pair(&mut commands, &mut meshes, &mats, built);
-            if pair.opaque.is_some() || pair.water.is_some() {
+            if pair.opaque.is_some() || pair.water.is_some() || pair.plants.is_some() {
                 entities.insert((cx, cz), pair);
             }
         }
@@ -181,7 +203,20 @@ fn spawn_pair(
             ))
             .id()
     });
-    ChunkPair { opaque, water }
+    let plants = built.plants.map(|mesh| {
+        commands
+            .spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(mats.plants.clone()),
+                Transform::IDENTITY,
+            ))
+            .id()
+    });
+    ChunkPair {
+        opaque,
+        water,
+        plants,
+    }
 }
 
 pub fn rebuild_dirty_chunks(
@@ -217,8 +252,16 @@ pub fn rebuild_dirty_chunks(
             &mut pair.water,
             built.water,
         );
+        update_slot(
+            &mut commands,
+            &mut meshes,
+            &mesh_query,
+            &mats.plants,
+            &mut pair.plants,
+            built.plants,
+        );
 
-        if pair.opaque.is_some() || pair.water.is_some() {
+        if pair.opaque.is_some() || pair.water.is_some() || pair.plants.is_some() {
             chunk_entities.0.insert(coord, pair);
         } else {
             chunk_entities.0.remove(&coord);

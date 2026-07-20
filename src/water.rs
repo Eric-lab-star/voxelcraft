@@ -84,7 +84,7 @@ pub fn simulate_water(
     let mut updates: Vec<(IVec3, u8)> = Vec::new();
     for c in &cells {
         let here = get(&world, *c);
-        if here != Block::Air && here != Block::Water {
+        if here != Block::Air && here != Block::Water && !here.is_plant() {
             continue; // solid cell
         }
         let cur = level(&world, *c);

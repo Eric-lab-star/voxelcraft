@@ -4,6 +4,7 @@
 use crate::block::Block;
 use crate::chunk::{chunk_of, DirtyChunks};
 use crate::hotbar::Hotbar;
+use crate::mesh::plant_bounds;
 use crate::particles::{spawn_break_particles, ParticleAssets};
 use crate::player::Player;
 use crate::water::{disturb, WaterSim};
@@ -120,28 +121,61 @@ pub fn edit_blocks(
     // Break the solid block we hit; place into the cell just before it. That
     // cell may be water — placing there displaces the water, so you can build
     // on the lakebed and stack blocks up through the water.
-    let target = if break_block { hit.block } else { hit.prev };
+    //
+    // Plants are replaceable: aiming at a flower and placing puts the new block
+    // *in* the flower's cell rather than in front of it, as in Minecraft.
+    let aimed_at_plant = world.get(hit.block.x, hit.block.y, hit.block.z).is_plant();
+    let target = if break_block || (place_block && aimed_at_plant) {
+        hit.block
+    } else {
+        hit.prev
+    };
 
-    // Don't let the player wall themselves into a block they're standing in.
-    if place_block && player.intersects_block(target) {
-        return;
+    let held = hotbar.block().unwrap_or(Block::Air);
+    if place_block {
+        // Don't let the player wall themselves into a block they're standing in.
+        // Plants don't collide, so they're exempt — you can stand in a flower.
+        if !held.is_plant() && player.intersects_block(target) {
+            return;
+        }
+        // A plant needs earth under it, and a cell that's free to take it.
+        let below = world.get(target.x, target.y - 1, target.z);
+        let cell = world.get(target.x, target.y, target.z);
+        let free = cell == Block::Air || cell.is_plant();
+        if held.is_plant() && (!below.supports_plants() || !free) {
+            return;
+        }
     }
 
     // Remember what we're breaking so we can spray matching particles.
     let broken = world.get(target.x, target.y, target.z);
-    let new_block = if break_block {
-        Block::Air
-    } else {
-        // `place_block` is only true when a block is held, so this is safe.
-        hotbar.block().unwrap_or(Block::Air)
-    };
+    let new_block = if break_block { Block::Air } else { held };
     if world.set(target.x, target.y, target.z, new_block) {
         mark_dirty(&mut dirty, target.x, target.z);
         disturb(&mut water, target); // wake nearby water so it can flow
+        // Whatever we just did to this cell may have pulled the ground out from
+        // under a plant sitting on it.
+        prune_plant_above(&mut world, &mut dirty, target);
         if break_block && broken.is_solid() {
             let center = target.as_vec3() + Vec3::splat(0.5);
             spawn_break_particles(&mut commands, &particles, broken, center, &mut rng);
         }
+    }
+}
+
+/// Break the plant directly above `p` if `p` can no longer support it. Plants
+/// are only ever one block tall, so a single check is enough — there is no chain
+/// of dependents to walk.
+fn prune_plant_above(world: &mut World, dirty: &mut DirtyChunks, p: IVec3) {
+    let above = p + IVec3::Y;
+    if !world.get(above.x, above.y, above.z).is_plant() {
+        return;
+    }
+    if world.get(p.x, p.y, p.z).supports_plants() {
+        return;
+    }
+    if world.set(above.x, above.y, above.z, Block::Air) {
+        mark_dirty(dirty, above.x, above.z);
     }
 }
 
@@ -155,9 +189,16 @@ pub fn highlight_target(
         return;
     };
     if let Some(hit) = raycast(&world, player.eye(), player.forward()) {
-        let center = hit.block.as_vec3() + Vec3::splat(0.5);
+        // Plants don't fill their cell, so a cell-sized outline would hang in the
+        // air around them as a black box. Hug the sprite instead.
+        let block = world.get(hit.block.x, hit.block.y, hit.block.z);
+        let (center, size) = if block.is_plant() {
+            plant_bounds(hit.block, block)
+        } else {
+            (hit.block.as_vec3() + Vec3::splat(0.5), Vec3::splat(1.003))
+        };
         gizmos.cube(
-            Transform::from_translation(center).with_scale(Vec3::splat(1.003)),
+            Transform::from_translation(center).with_scale(size),
             Color::srgb(0.05, 0.05, 0.05),
         );
     }

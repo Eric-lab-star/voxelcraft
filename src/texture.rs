@@ -12,8 +12,8 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
 pub const TILE: usize = 16;
 pub const COLS: usize = 4;
-pub const ROWS: usize = 3;
-pub const NUM_TILES: u32 = 9;
+pub const ROWS: usize = 6;
+pub const NUM_TILES: u32 = 22;
 
 // Tile indices within the atlas.
 pub const T_GRASS_TOP: u32 = 0;
@@ -25,6 +25,24 @@ pub const T_WATER: u32 = 5;
 pub const T_WOOD_TOP: u32 = 6;
 pub const T_WOOD_SIDE: u32 = 7;
 pub const T_LEAVES: u32 = 8;
+// Plant tiles. Unlike every tile above, these are mostly *transparent* — they
+// are drawn on cross-shaped quads and rely on alpha cutout for their silhouette.
+pub const T_TALL_GRASS: u32 = 9;
+pub const T_FLOWER_RED: u32 = 10;
+pub const T_FLOWER_YELLOW: u32 = 11;
+// Hanok building materials.
+pub const T_ROOF_TILE: u32 = 12;
+pub const T_PLASTER: u32 = 13;
+pub const T_PAPER: u32 = 14;
+// Palace materials.
+pub const T_DANCHEONG: u32 = 15;
+pub const T_RED_PILLAR: u32 = 16;
+pub const T_ROOF_RIDGE: u32 = 17;
+pub const T_GRANITE: u32 = 18;
+// Village materials.
+pub const T_THATCH: u32 = 19;
+pub const T_CLAY_WALL: u32 = 20;
+pub const T_ROAD: u32 = 21;
 
 /// Shared handles for the block atlas: the image plus a grid layout so UI
 /// (the hotbar) can address individual tiles by index.
@@ -219,8 +237,247 @@ fn tile_pixel(tile: u32, x: usize, y: usize) -> [u8; 4] {
             }
             c
         }
+        T_TALL_GRASS => tall_grass_pixel(x, y, n),
+        // Poppy: dark eye, red petals. Dandelion: pale eye, yellow petals.
+        T_FLOWER_RED => flower_pixel(x, y, n, [198, 52, 48], [62, 40, 34]),
+        T_FLOWER_YELLOW => flower_pixel(x, y, n, [230, 190, 50], [248, 228, 116]),
+        T_ROOF_TILE => roof_tile_pixel(x, y, n),
+        T_PLASTER => {
+            // Lime plaster: near-white with a faint warm mottle, no pattern —
+            // it has to read as flat next to the busy roof and lattice tiles.
+            shade([206, 198, 182], n, 14.0)
+        }
+        T_PAPER => paper_pixel(x, y, n),
+        T_DANCHEONG => dancheong_pixel(x, y, n),
+        T_RED_PILLAR => red_pillar_pixel(x, y, n),
+        T_ROOF_RIDGE => roof_ridge_pixel(x, y, n),
+        T_GRANITE => granite_pixel(x, y, n),
+        T_THATCH => thatch_pixel(x, y, n),
+        T_CLAY_WALL => clay_wall_pixel(x, y, n),
+        T_ROAD => road_pixel(x, y, n),
         _ => [255, 0, 255, 255], // magenta = missing
     }
+}
+
+/// One pixel of 초가 thatch: bundles of straw laid in overlapping courses. The
+/// per-column length jitter is what keeps a roof of these from looking like
+/// corduroy — real thatch has a ragged, uneven lower edge to every course.
+fn thatch_pixel(x: usize, y: usize, n: f32) -> [u8; 4] {
+    // Courses about 6 px deep, with the boundary wobbling column to column.
+    let wobble = (hash(x as i32 * 19, 3) * 2.5) as usize;
+    let depth = (y + wobble) % 6;
+    // The bottom of each course is in shadow under the one that overlaps it.
+    let base = match depth {
+        0 => [104, 78, 34],
+        1 => [150, 116, 52],
+        4 => [128, 98, 44],
+        5 => [112, 86, 38],
+        _ => [178, 144, 68],
+    };
+    // A few pale straws catching the light.
+    if hash(x as i32 * 7, y as i32 * 5) > 0.9 {
+        return shade([206, 176, 100], n, 10.0);
+    }
+    shade(base, n, 18.0)
+}
+
+/// One pixel of 흙담: mud render over a straw binder, with the straw showing
+/// through as short pale flecks.
+fn clay_wall_pixel(x: usize, y: usize, n: f32) -> [u8; 4] {
+    let mut c = shade([172, 142, 104], n, 20.0);
+    // Short horizontal straw flecks, not round speckle — they read as fibres.
+    if hash((x / 2) as i32 * 11, y as i32 * 17) > 0.86 {
+        c = shade([200, 176, 128], n, 12.0);
+    }
+    // Occasional darker patch where the render has weathered thin.
+    if hash(x as i32 * 5, (y / 3) as i32 * 23) > 0.93 {
+        c = shade([142, 116, 84], n, 10.0);
+    }
+    c
+}
+
+/// One pixel of a beaten-earth street: compacted dirt with pebbles pressed into
+/// it. Deliberately greyer and flatter than `T_DIRT`, so a road reads as a road
+/// where it crosses bare ground.
+fn road_pixel(x: usize, y: usize, n: f32) -> [u8; 4] {
+    let mut c = shade([138, 118, 92], n, 16.0);
+    if hash(x as i32 * 13, y as i32 * 7) > 0.88 {
+        c = shade([164, 156, 146], n, 12.0); // pebble
+    } else if hash(x as i32 * 3, y as i32 * 29) > 0.9 {
+        c = shade([112, 96, 74], n, 10.0); // rut
+    }
+    c
+}
+
+/// One pixel of 단청: the painted band that runs along a palace beam.
+///
+/// Real dancheong puts an elaborate 머리초 motif at each end of a beam, which a
+/// single repeating 16px tile cannot carry. What survives the reduction — and
+/// what the eye actually reads from across a courtyard — is the colour order:
+/// a deep green ground with a red-white-blue band running through it.
+fn dancheong_pixel(x: usize, y: usize, n: f32) -> [u8; 4] {
+    const GREEN: [u8; 3] = [42, 104, 72];
+    const CREAM: [u8; 3] = [230, 224, 204];
+    const RED: [u8; 3] = [166, 50, 40];
+    const BLUE: [u8; 3] = [48, 84, 138];
+
+    // Dark rails top and bottom, so stacked beams stay visually separated.
+    if y == 0 || y == TILE - 1 {
+        return shade([38, 40, 44], n, 8.0);
+    }
+    if (5..=10).contains(&y) {
+        // Cream keylines close the band off above and below.
+        if y == 5 || y == 10 {
+            return shade(CREAM, n, 8.0);
+        }
+        // The motif repeats twice across the tile.
+        return match x % 8 {
+            0..=2 => shade(RED, n, 12.0),
+            3..=4 => shade(CREAM, n, 10.0),
+            _ => shade(BLUE, n, 12.0),
+        };
+    }
+    shade(GREEN, n, 14.0)
+}
+
+/// One pixel of a vermilion palace column. The across-the-width shading is what
+/// makes a stack of these read as a *round* pillar instead of a flat red post.
+/// (`_y` is unused on purpose: a column looks the same all the way up, so the
+/// tile only varies across its width.)
+fn red_pillar_pixel(x: usize, _y: usize, n: f32) -> [u8; 4] {
+    let curve = 1.0 - ((x as f32 - 7.5).abs() / 8.0);
+    let base = [
+        lerp(112.0, 178.0, curve) as u8,
+        lerp(34.0, 62.0, curve) as u8,
+        lerp(28.0, 46.0, curve) as u8,
+    ];
+    // Faint vertical grain in the lacquer.
+    let grain = if hash(x as i32 * 23, 5) > 0.7 { -8.0 } else { 0.0 };
+    shade(base, n + grain / 255.0, 10.0)
+}
+
+/// One pixel of the white-plastered ridge (양성바름). Dark tile courses cap it
+/// above and below, so a ridge line reads as a bright band edged in slate — the
+/// detail that most distinguishes a palace roof from a commoner's.
+fn roof_ridge_pixel(x: usize, y: usize, n: f32) -> [u8; 4] {
+    if y < 2 || y >= TILE - 2 {
+        return shade([52, 56, 66], n, 10.0);
+    }
+    let mut c = shade([224, 220, 210], n, 12.0);
+    // A little weathering so a long ridge isn't a flat white stripe.
+    if hash(x as i32 * 11, y as i32 * 7) > 0.88 {
+        c = shade([198, 194, 184], n, 8.0);
+    }
+    c
+}
+
+/// One pixel of dressed granite ashlar: pale speckled stone cut into courses,
+/// with the joints offset row to row the way real coursed masonry is laid.
+fn granite_pixel(x: usize, y: usize, n: f32) -> [u8; 4] {
+    let course = y / 8;
+    // Offset alternate courses so the vertical joints don't line up into a grid.
+    let joint_x = (x + course * 4) % 8 == 0;
+    if y % 8 == 0 || joint_x {
+        return shade([132, 130, 126], n, 10.0);
+    }
+    let mut c = shade([176, 174, 168], n, 16.0);
+    if hash(x as i32 * 3, y as i32 * 13) > 0.9 {
+        c = shade([150, 148, 146], n, 8.0); // mica fleck
+    }
+    c
+}
+
+/// One pixel of a 기와 roof tile: rows of half-round clay tiles running down the
+/// slope. The dark seams between them are what make a roof read as tiled rather
+/// than as a flat grey slab when you see it from across a valley.
+fn roof_tile_pixel(x: usize, y: usize, n: f32) -> [u8; 4] {
+    // Four convex tiles across the width, each 4 px.
+    let within = x % 4;
+    let base = match within {
+        0 => [44, 48, 58],   // shaded valley where two tiles meet
+        1 => [92, 98, 112],  // rising face
+        2 => [116, 122, 138], // crown, catching the light
+        _ => [70, 76, 90],   // falling face
+    };
+    // Courses overlap every 5 px down the slope; the lip casts a dark line.
+    if y % 5 == 0 {
+        return shade([34, 38, 46], n, 8.0);
+    }
+    shade(base, n, 12.0)
+}
+
+/// One pixel of a 한지 door: warm paper behind a dark wooden lattice.
+fn paper_pixel(x: usize, y: usize, n: f32) -> [u8; 4] {
+    let (fx, fy) = (x as i32, y as i32);
+    // Outer frame plus a grid of muntins.
+    let frame = fx <= 0 || fy <= 0 || fx >= TILE as i32 - 1 || fy >= TILE as i32 - 1;
+    let lattice = fx % 5 == 0 || fy % 5 == 0;
+    if frame || lattice {
+        return shade([96, 68, 42], n, 10.0);
+    }
+    // Paper glows warm; the grain is deliberately subtle so the lattice reads.
+    shade([226, 208, 166], n, 10.0)
+}
+
+/// One pixel of the tall-grass tuft: a clump of blades rooted at the bottom of
+/// the tile with transparent gaps between them.
+///
+/// The tile is drawn on a cross of two quads, so its silhouette *is* the plant —
+/// the alpha here is doing the same job the mesh does for a cube block.
+fn tall_grass_pixel(x: usize, y: usize, n: f32) -> [u8; 4] {
+    let h = blade_height(x);
+    let from_bottom = TILE - 1 - y;
+    if h == 0 || from_bottom >= h {
+        return [0, 0, 0, 0];
+    }
+    // Tips run lighter and yellower than the roots, which reads as blades
+    // catching the light rather than a flat green smear.
+    let t = from_bottom as f32 / h as f32;
+    let base = [
+        lerp(56.0, 126.0, t) as u8,
+        lerp(110.0, 170.0, t) as u8,
+        lerp(38.0, 60.0, t) as u8,
+    ];
+    shade(base, n, 16.0)
+}
+
+/// Height in pixels of the grass blade in column `x`; 0 leaves a gap. Tallest in
+/// the middle so the tuft reads as a rounded clump, with per-column jitter so the
+/// top edge stays ragged.
+fn blade_height(x: usize) -> usize {
+    // Gaps and heights come from independent hashes: sharing one made the gaps
+    // fall only among the shortest blades, which packed the tuft into a solid
+    // green mass instead of separate stalks.
+    if hash(x as i32 * 29, 43) < 0.34 {
+        return 0;
+    }
+    let r = hash(x as i32 * 17, 91);
+    let centre = 1.0 - ((x as f32 - 7.5).abs() / 8.0);
+    (2.0 + centre * 7.0 + r * 5.0) as usize
+}
+
+/// One pixel of a flower: blossom, then stem, then leaves, checked in that order
+/// so the stem never draws a green line through the middle of the blossom.
+fn flower_pixel(x: usize, y: usize, n: f32, petal: [u8; 3], eye: [u8; 3]) -> [u8; 4] {
+    // Blossom: a slightly squashed disc sitting at the top of the stem.
+    let dx = x as f32 - 7.5;
+    let dy = y as f32 - 4.5;
+    let d = (dx * dx + dy * dy * 1.3).sqrt();
+    if d < 1.7 {
+        return shade(eye, n, 10.0);
+    }
+    if d < 3.8 {
+        return shade(petal, n, 18.0);
+    }
+
+    let (fx, fy) = (x as i32, y as i32);
+    if (fx == 7 || fx == 8) && (8..TILE as i32).contains(&fy) {
+        return shade([46, 104, 40], n, 12.0); // stem
+    }
+    if (fy == 10 && (5..7).contains(&fx)) || (fy == 12 && (9..11).contains(&fx)) {
+        return shade([54, 120, 44], n, 12.0); // leaves
+    }
+    [0, 0, 0, 0]
 }
 
 /// One pixel of the water tile at a given wave `phase` (radians). Advancing the
@@ -364,6 +621,20 @@ pub fn block_tile(block: crate::block::Block, face: usize) -> u32 {
             }
         }
         Block::Leaves => T_LEAVES,
+        // Plants show the same tile whatever way you look at them.
+        Block::TallGrass => T_TALL_GRASS,
+        Block::RedFlower => T_FLOWER_RED,
+        Block::YellowFlower => T_FLOWER_YELLOW,
+        Block::RoofTile => T_ROOF_TILE,
+        Block::Plaster => T_PLASTER,
+        Block::Paper => T_PAPER,
+        Block::Dancheong => T_DANCHEONG,
+        Block::RedPillar => T_RED_PILLAR,
+        Block::RoofRidge => T_ROOF_RIDGE,
+        Block::Granite => T_GRANITE,
+        Block::Thatch => T_THATCH,
+        Block::ClayWall => T_CLAY_WALL,
+        Block::Road => T_ROAD,
     }
 }
 
