@@ -243,6 +243,60 @@ const DOOR_H: i32 = s(3);
 /// hard, and this is the number that carries it.
 const EAVES: i32 = s(2);
 
+/// How many courses of 공포 stand between the beam and the eaves.
+///
+/// Tied to `EAVES` rather than chosen: the brackets exist to walk the eave line
+/// outward from the wall, so they step out one block per course and stop one
+/// short, leaving the eave itself to cantilever the last block the way a real
+/// 서까래 does.
+const BRACKET_TIERS: i32 = EAVES - 1;
+
+/// Spacing of the bracket sets along a run. 경복궁's halls are 다포계 — brackets
+/// both on the columns and in the spaces between them — so this is tighter than
+/// `BAY`. A lesser building would be 주심포, with a set only over each column.
+const BRACKET_SPACING: i32 = 2;
+
+/// 공포 — the stepped bracket sets that carry the eaves out past the wall.
+///
+/// Without them the roof simply appeared, three blocks wider than the building,
+/// with nothing between the painted beam and the overhang: the eave hung in the
+/// air. The brackets are what actually holds a Korean roof out that far, and
+/// they are the densest, most recognisable band on the whole elevation.
+///
+/// Each course steps out one block and is drawn as a ring, painted where a
+/// bracket set sits and left as plain timber between, so the band reads as a
+/// rhythm rather than as a solid collar. Corners are always painted: 귀공포, the
+/// corner set, is the largest one on the building and carries the two eave lines
+/// that meet there.
+///
+/// Returns the level the roof should start at.
+fn lay_brackets(world: &mut World, cx: i32, cz: i32, bx: i32, bz: i32, base_y: i32) -> i32 {
+    for tier in 0..BRACKET_TIERS {
+        let (ex, ez) = (bx + tier + 1, bz + tier + 1);
+        let y = base_y + tier;
+        for dz in -ez..=ez {
+            for dx in -ex..=ex {
+                let on_x_run = dz.abs() == ez;
+                let on_z_run = dx.abs() == ex;
+                if !on_x_run && !on_z_run {
+                    continue; // the middle is the hall's ceiling, not brackets
+                }
+                // Measure the rhythm along whichever run this cell belongs to.
+                let along = if on_x_run { dx } else { dz };
+                let bracket =
+                    (on_x_run && on_z_run) || along.rem_euclid(BRACKET_SPACING) == 0;
+                let block = if bracket {
+                    Block::Dancheong
+                } else {
+                    Block::Wood
+                };
+                world.set(cx + dx, y, cz + dz, block);
+            }
+        }
+    }
+    base_y + BRACKET_TIERS
+}
+
 /// Lay one course-by-course 담장 cell: granite footing, plaster body, tiled
 /// coping. `accent` replaces the lowest body course, which is where 자경전's
 /// 꽃담 carries its pattern.
@@ -569,7 +623,8 @@ fn place_residence(
             }
         }
     }
-    lay_roof(world, cx, cz, bx, bz, beam + 1, EAVES, PALACE_STEP, ridged);
+    let eave = lay_brackets(world, cx, cz, bx, bz, beam + 1);
+    lay_roof(world, cx, cz, bx, bz, eave, EAVES, PALACE_STEP, ridged);
 
     // 드므 — the bronze vats that stood at a hall's corners, kept full of water
     // as a charm against fire.
@@ -720,7 +775,8 @@ fn place_inner_gate(world: &mut World, cx: i32, cz: i32, gy: i32) {
             }
         }
     }
-    lay_roof(world, cx, cz, GX, GZ, beam + 1, EAVES, PALACE_STEP, true);
+    let eave = lay_brackets(world, cx, cz, GX, GZ, beam + 1);
+    lay_roof(world, cx, cz, GX, GZ, eave, EAVES, PALACE_STEP, true);
 }
 
 /// 품계석 — the ranked stones officials lined up beside, in two rows down the
@@ -812,7 +868,8 @@ fn place_gyeonghoeru(world: &mut World, cx: i32, cz: i32, gy: i32) {
             }
         }
     }
-    lay_roof(world, cx, cz, BASE_X, BASE_Z, beam + 1, EAVES, PALACE_STEP, true);
+    let eave = lay_brackets(world, cx, cz, BASE_X, BASE_Z, beam + 1);
+    lay_roof(world, cx, cz, BASE_X, BASE_Z, eave, EAVES, PALACE_STEP, true);
 
     // A causeway east to the bank, at deck height. It starts *beyond* the
     // pavilion's own edge: running it from `BASE_X` cleared the colonnade and
@@ -928,7 +985,8 @@ fn place_gate(world: &mut World, cx: i32, cz: i32, gy: i32) {
             }
         }
     }
-    lay_roof(world, cx, cz, GX, GZ, beam + 1, EAVES, PALACE_STEP, true);
+    let eave = lay_brackets(world, cx, cz, GX, GZ, beam + 1);
+    lay_roof(world, cx, cz, GX, GZ, eave, EAVES, PALACE_STEP, true);
 }
 
 /// 근정전 — the throne hall, on two granite 월대 terraces, with the double roof
@@ -945,7 +1003,8 @@ fn place_throne_hall(world: &mut World, cx: i32, cz: i32, gy: i32) {
     lay_hall_floor(world, cx, cz, s(9), s(6), floor - 1);
     place_throne(world, cx, cz - s(2), floor);
     let lower_beam = floor + s(4);
-    lay_roof(world, cx, cz, s(9), s(6), lower_beam + 1, EAVES, PALACE_STEP, true);
+    let lower_eave = lay_brackets(world, cx, cz, s(9), s(6), lower_beam + 1);
+    lay_roof(world, cx, cz, s(9), s(6), lower_eave, EAVES, PALACE_STEP, true);
 
     // Upper storey rising through the lower roof — the 중층 that makes 근정전
     // read as a throne hall rather than a large shed. It starts above the lower
@@ -953,7 +1012,8 @@ fn place_throne_hall(world: &mut World, cx: i32, cz: i32, gy: i32) {
     let upper_floor = lower_beam + s(4);
     hall_storey(world, cx, cz, s(6), s(4), upper_floor, s(3));
     let upper_beam = upper_floor + s(3);
-    lay_roof(world, cx, cz, s(6), s(4), upper_beam + 1, EAVES, PALACE_STEP, true);
+    let upper_eave = lay_brackets(world, cx, cz, s(6), s(4), upper_beam + 1);
+    lay_roof(world, cx, cz, s(6), s(4), upper_eave, EAVES, PALACE_STEP, true);
 }
 
 /// 어좌 — the throne, on its dais at the north end of the hall, under a 닫집
@@ -1186,6 +1246,42 @@ mod checks {
         }
         assert_eq!(leaves, 0, "trees were planted on the Joseon map");
         assert_eq!(plants, 0, "grass or flowers were scattered on the Joseon map");
+    }
+
+    /// 공포 has to actually bridge the wall and the eave. The whole reason it
+    /// exists here is that the roof used to appear three blocks wider than the
+    /// building with nothing beneath the overhang, and a roof that hangs in the
+    /// air is exactly as "standing" as one that doesn't, so no other test here
+    /// would notice it coming back.
+    #[test]
+    fn the_eaves_are_carried_on_brackets() {
+        let w = generate(1);
+        let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+        let hz = cz + COURT_OFFSET_Z - s(2); // 근정전, on the axis
+        let bx = s(9); // its lower storey's half-width
+        let beam = GROUND + 3 + s(4);
+
+        for tier in 0..BRACKET_TIERS {
+            let y = beam + 1 + tier;
+            let out = bx + tier + 1;
+            assert!(
+                out < bx + EAVES,
+                "tier {tier} reaches the eave line; nothing is left to cantilever"
+            );
+            let b = w.get(cx + out, y, hz);
+            assert!(
+                matches!(b, Block::Dancheong | Block::Wood),
+                "no 공포 {out} out at tier {tier}, found {b:?} — the eave has \
+                 nothing under it"
+            );
+            // The band steps *out* as it rises: the block beyond this tier is
+            // still open at this level, and gets filled by the tier above.
+            assert_eq!(
+                w.get(cx + out + 1, y, hz),
+                Block::Air,
+                "tier {tier} is a solid collar rather than a step"
+            );
+        }
     }
 
     /// Nothing may touch the ceiling or the edge of the playable area.
