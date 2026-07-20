@@ -549,12 +549,25 @@ fn place_inner_quarters(world: &mut World, cx: i32, cz: i32, gy: i32) {
     }
 }
 
-/// A cross wall dividing one yard from the next, with a gateway on the axis.
+/// How far off the axis the 협문 — the side gates — sit, and with them the
+/// route that skirts each hall.
+///
+/// Every 기단 runs right up to the cross wall behind it, with nothing between:
+/// the halls have 15 to 17 blocks of clear yard down either flank and *zero*
+/// north of them. So a way round a hall can leave the axis and pass its side,
+/// but it has no way back to the axis afterwards unless the wall it meets opens
+/// somewhere other than the middle. Hence a gate either side, clear of the
+/// widest platform (강녕전's, at 15) and well inside the yard's half-width of 30.
+const BYPASS_X: i32 = s(13);
+
+/// A cross wall dividing one yard from the next, with a gateway on the axis and
+/// a 협문 either side of it.
 fn cross_wall(world: &mut World, cx: i32, cz: i32, gy: i32) {
     for dx in -INNER_X..=INNER_X {
-        if dx.abs() <= 1 {
-            // The gateway — leave it open, but carry the coping across so the
-            // wall reads as continuous.
+        let side_gate = (dx.abs() - BYPASS_X).abs() <= 1;
+        if dx.abs() <= 1 || side_gate {
+            // The gateways — leave them open, but carry the coping across so
+            // the wall still reads as one continuous run.
             world.set(cx + dx, gy + WALL_H, cz, Block::RoofTile);
             continue;
         }
@@ -980,6 +993,31 @@ fn lay_paths(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // the last hall on the axis.
     let spine_end = cz + GYOTAE_Z + s(4) + 2;
     pave(world, gy, cx, court_north, cx, spine_end, Block::Granite);
+
+    // The flanking routes. The spine runs at every hall straight into its 기단
+    // and stops, because the halls sit on the axis: to carry on you climb the
+    // platform, walk round the building on its apron and drop off the far side.
+    // That is a real way through — the apron is dressed granite and is meant to
+    // be walked — but it is the ceremonial way, up onto the terrace of the hall
+    // the king is sitting in, and it should not be the only one.
+    //
+    // These run the length of the residential quarter down both flanks, past
+    // each hall and through the 협문 in every cross wall, and tie back into the
+    // spine at both ends. One continuous pair rather than three separate
+    // detours, which is also what the 행각 down the sides of these yards is.
+    // Both ends tie back in *front* of a platform, not onto one. The spine runs
+    // right up to 교태전's 기단 and is meant to; the flanks would be pointless if
+    // their last block put you on the terrace they exist to avoid. There is no
+    // rejoining behind 교태전 either — 아미산 is terraced across the axis with
+    // its lowest step against the platform's back edge.
+    let flank_south = cz + COURT_OFFSET_Z - COURT_Z - s(3);
+    let flank_north = cz + GYOTAE_Z + s(4) + s(2) + 1;
+    for side in [-1, 1] {
+        let fx = cx + side * BYPASS_X;
+        pave(world, gy, cx, flank_south, fx, flank_south, Block::Road);
+        pave(world, gy, fx, flank_south, fx, flank_north, Block::Road);
+        pave(world, gy, fx, flank_north, cx, flank_north, Block::Road);
+    }
 
     // On to the rear garden. 교태전 stands on the axis and 아미산 is terraced
     // across it directly behind, so the way through turns off in front of the
@@ -1474,6 +1512,70 @@ mod checks {
                 "{name} is not joined to the path network at ({x},{z})"
             );
         }
+    }
+
+    /// There is a way through the residential quarter that never sets foot on a
+    /// hall's 기단.
+    ///
+    /// The halls stand on the axis, so the spine runs into each platform and
+    /// stops; you carry on by climbing it and walking round the building. That
+    /// route works and always did, which is why the network test passes with or
+    /// without the flanking paths — it only asks whether you can get there, and
+    /// over the terraces you can. This asks the separate question the flanks
+    /// exist to answer: whether you can get there *without* walking across the
+    /// terrace of an occupied hall.
+    #[test]
+    fn the_halls_can_be_passed_without_crossing_their_terraces() {
+        let w = generate(1);
+        let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+
+        // The platforms, as laid by `place_residence`: half-extents plus apron.
+        let on_terrace = |x: i32, z: i32| {
+            [
+                (SAJEONG_Z, s(7)),
+                (GANGNYEONG_Z, s(8)),
+                (GYOTAE_Z, s(7)),
+            ]
+            .iter()
+            .any(|&(hz, bx)| {
+                (x - cx).abs() <= bx + s(2) && (z - (cz + hz)).abs() <= s(4) + s(2)
+            })
+        };
+        let open = |x: i32, z: i32| {
+            !on_terrace(x, z)
+                && [GROUND + 1, GROUND].into_iter().any(|y| {
+                    matches!(
+                        w.get(x, y, z),
+                        Block::Granite | Block::Road | Block::Stone
+                    ) && !w.get(x, y + 1, z).blocks_movement()
+                        && !w.get(x, y + 2, z).blocks_movement()
+                })
+        };
+
+        // Start on the spine just inside 사정문 and try to reach the head of the
+        // quarter. The goal sits one block in front of 교태전's platform: the
+        // last hall on the axis is where the flanks tie back in, since 아미산
+        // fills the ground immediately behind it.
+        let start = (cx, cz + COURT_OFFSET_Z - COURT_Z - s(3));
+        let goal = (cx, cz + GYOTAE_Z + s(4) + s(2) + 1);
+        assert!(open(start.0, start.1), "the flank junction is not paved");
+
+        let mut seen = std::collections::HashSet::new();
+        let mut queue = std::collections::VecDeque::new();
+        seen.insert(start);
+        queue.push_back(start);
+        while let Some((x, z)) = queue.pop_front() {
+            for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let n = (x + dx, z + dz);
+                if open(n.0, n.1) && seen.insert(n) {
+                    queue.push_back(n);
+                }
+            }
+        }
+        assert!(
+            seen.contains(&goal),
+            "no way past the halls except over their terraces"
+        );
     }
 
     /// Nothing may touch the ceiling or the edge of the playable area.
