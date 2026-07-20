@@ -5,6 +5,7 @@ use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
+use crate::block::Block;
 use crate::world::{World, PLAY_MARGIN, WORLD_X, WORLD_Z};
 
 /// Half-extents of the player's collision box (0.6 × 1.8 × 0.6 blocks).
@@ -21,6 +22,51 @@ const TERMINAL: f32 = 55.0;
 /// Nudge used when snapping out of a block so we don't re-collide next frame.
 const EPS: f32 = 1.0e-3;
 
+// --- Water --------------------------------------------------------------
+// Water is modelled as three forces on top of the usual gravity: buoyancy that
+// scales with how much of the body is under the surface, a linear drag that
+// bleeds off speed, and the swim strokes the player asks for.
+//
+// Buoyancy at full submersion is set equal to gravity, i.e. neutral: once you
+// are completely under you hang at whatever depth you stopped at instead of
+// bobbing back up, which is what makes the lakebed explorable. Break the
+// surface and the submerged fraction — and with it the lift — drops, so you
+// sink again unless you keep stroking upward.
+const BUOYANCY: f32 = GRAVITY;
+/// Exponential velocity damping per second at full submersion. Every terminal
+/// speed below is `net_acceleration / WATER_DRAG`.
+const WATER_DRAG: f32 = 3.4;
+/// Upward acceleration from a swim stroke (Space). Sustained rise is this minus
+/// the uncancelled gravity, so it settles the body ~40% submerged at the
+/// surface — head and shoulders out — rather than rising forever.
+const SWIM_UP_ACCEL: f32 = 20.0;
+/// Downward acceleration when diving (Shift); ≈ 2.6 m/s sustained.
+const SWIM_DOWN_ACCEL: f32 = 9.0;
+/// Rise rate when hauling yourself up a wall from the water (see the climb-out
+/// note in `player_physics`). Comfortably beats the 1-block bank you swam into.
+const WATER_CLIMB_SPEED: f32 = 3.6;
+/// Horizontal cruise speed while swimming, and its sprint variant.
+const SWIM_SPEED: f32 = 3.1;
+const SWIM_SPRINT_SPEED: f32 = 4.4;
+/// How quickly horizontal velocity chases the input direction in water. Low
+/// enough that starts and stops glide instead of snapping like they do on land.
+const SWIM_ACCEL: f32 = 6.0;
+/// Fastest you can move vertically in water, however you got there — this is
+/// what turns a long fall into a splash-and-slow instead of a plunge.
+const WATER_TERMINAL: f32 = 8.0;
+
+// --- Flight (developer mode) -----------------------------------------------
+// Toggled by double-tapping jump, the way Minecraft's creative flight is, so
+// there is no extra key to learn. Flight still collides with the world: it is
+// for getting around and building at height, not for passing through terrain.
+const FLY_SPEED: f32 = 12.0;
+const FLY_SPRINT_SPEED: f32 = 24.0;
+/// How quickly flight velocity chases the input. Responsive, but enough lag that
+/// you glide to a stop instead of halting dead in mid-air.
+const FLY_ACCEL: f32 = 12.0;
+/// Two jump presses within this many seconds toggle flight.
+const FLY_TOGGLE_WINDOW: f32 = 0.35;
+
 #[derive(Component)]
 pub struct Player {
     /// Centre of the collision box in world space.
@@ -29,6 +75,10 @@ pub struct Player {
     pub yaw: f32,
     pub pitch: f32,
     pub on_ground: bool,
+    /// Fraction of the collision box below the water surface, 0..1.
+    pub submersion: f32,
+    /// Whether the player is flying (developer mode).
+    pub flying: bool,
 }
 
 impl Player {
@@ -39,6 +89,8 @@ impl Player {
             yaw: 0.0,
             pitch: -0.2,
             on_ground: false,
+            submersion: 0.0,
+            flying: false,
         }
     }
 
@@ -144,6 +196,8 @@ pub fn player_physics(
     time: Res<Time>,
     world: Res<World>,
     mut query: Query<(&mut Player, &mut Transform)>,
+    mut toast: ResMut<crate::menu::Toast>,
+    mut last_jump_tap: Local<f32>,
 ) {
     // Clamp dt so a frame hitch can't launch the player through the ground.
     let dt = time.delta_secs().min(0.05);
@@ -171,32 +225,117 @@ pub fn player_physics(
         if wish != Vec3::ZERO {
             wish = wish.normalize();
         }
-        let speed = if keys.pressed(KeyCode::ControlLeft) {
-            SPRINT_SPEED
-        } else {
-            WALK_SPEED
-        };
+        let sprint = keys.pressed(KeyCode::ControlLeft);
 
-        // Gravity + jump. Holding Space keeps hopping each time we land.
-        player.velocity.y = (player.velocity.y - GRAVITY * dt).max(-TERMINAL);
-        if player.on_ground && keys.pressed(KeyCode::Space) {
+        // Double-tap jump toggles flight. The tap time is tracked per system
+        // rather than per player because there is only ever one of them.
+        if keys.just_pressed(KeyCode::Space) {
+            let now = time.elapsed_secs();
+            if now - *last_jump_tap < FLY_TOGGLE_WINDOW {
+                player.flying = !player.flying;
+                player.velocity = Vec3::ZERO;
+                *last_jump_tap = 0.0; // don't let a third tap re-toggle
+                toast.show(if player.flying {
+                    "비행 켜짐 — Space 상승, Shift 하강"
+                } else {
+                    "비행 꺼짐"
+                });
+            } else {
+                *last_jump_tap = now;
+            }
+        }
+
+        player.submersion = submersion(&world, player.center);
+        let s = player.submersion;
+
+        if player.flying {
+            // --- Flying -----------------------------------------------------
+            // No gravity and no buoyancy: velocity chases the input directly, so
+            // you hover wherever you stop. Water is ignored entirely — being
+            // dragged around by buoyancy while flying would be maddening.
+            let speed = if sprint { FLY_SPRINT_SPEED } else { FLY_SPEED };
+            let mut target = wish * speed;
+            if keys.pressed(KeyCode::Space) {
+                target.y += speed;
+            }
+            if keys.pressed(KeyCode::ShiftLeft) {
+                target.y -= speed;
+            }
+            let k = 1.0 - (-FLY_ACCEL * dt).exp();
+            let v = player.velocity;
+            player.velocity = v + (target - v) * k;
+        } else if s > 0.0 {
+            // --- In water ---------------------------------------------------
+            // Buoyancy scales with the submerged fraction, so the net vertical
+            // force flips sign as you cross the surface and you settle there.
+            player.velocity.y -= (GRAVITY - BUOYANCY * s) * dt;
+            // Stroke thrust must NOT fade out with submersion the way buoyancy
+            // does: you kick with your legs, at the bottom of the box, so the
+            // thrust is there as long as they have water to push against. Fading
+            // it linearly cancelled the stroke exactly as you tried to breach.
+            let stroke = (s * 4.0).min(1.0);
+            if keys.pressed(KeyCode::Space) {
+                player.velocity.y += SWIM_UP_ACCEL * stroke * dt;
+            }
+            if keys.pressed(KeyCode::ShiftLeft) {
+                player.velocity.y -= SWIM_DOWN_ACCEL * stroke * dt;
+            }
+            // Drag. Applied exponentially so it can't overshoot at any dt, and
+            // scaled by submersion so wading is barely slowed.
+            let damp = (-WATER_DRAG * s * dt).exp();
+            player.velocity.y = (player.velocity.y * damp).clamp(-WATER_TERMINAL, WATER_TERMINAL);
+
+            // Horizontal motion is momentum-based here (on land it is direct),
+            // which is what gives swimming its glide.
+            let target = wish * if sprint { SWIM_SPRINT_SPEED } else { SWIM_SPEED };
+            let k = 1.0 - (-SWIM_ACCEL * dt).exp();
+            player.velocity.x += (target.x - player.velocity.x) * k;
+            player.velocity.z += (target.z - player.velocity.z) * k;
+        } else {
+            player.velocity.y = (player.velocity.y - GRAVITY * dt).max(-TERMINAL);
+            let speed = if sprint { SPRINT_SPEED } else { WALK_SPEED };
+            player.velocity.x = wish.x * speed;
+            player.velocity.z = wish.z * speed;
+        }
+
+        // Jumping needs feet on something, not dry land: pushing off the lakebed
+        // is how you surface from a shallow pool. Drag eats most of it when deep.
+        // While flying, Space is the ascend control instead.
+        if player.on_ground && !player.flying && keys.pressed(KeyCode::Space) {
             player.velocity.y = JUMP_SPEED;
         }
 
-        let delta = Vec3::new(
-            wish.x * speed * dt,
-            player.velocity.y * dt,
-            wish.z * speed * dt,
-        );
-
         // Resolve one axis at a time so we slide along walls instead of sticking.
         let mut center = player.center;
-        step_axis(&world, &mut center, 0, delta.x);
-        step_axis(&world, &mut center, 2, delta.z);
+        // Zero the axis on impact so swim momentum doesn't pile up against a wall.
+        let mut against_wall = false;
+        if step_axis(&world, &mut center, 0, player.velocity.x * dt) {
+            player.velocity.x = 0.0;
+            against_wall = true;
+        }
+        if step_axis(&world, &mut center, 2, player.velocity.z * dt) {
+            player.velocity.z = 0.0;
+            against_wall = true;
+        }
+
+        // Pulling out onto a bank. No amount of swimming lifts you clear of the
+        // water — buoyancy dies as you rise, which is realistic but leaves you
+        // stranded, since the shore sits at the waterline and your feet never
+        // reach it. So swimming into a wall while holding Space climbs it, the
+        // way you'd haul yourself up on the edge. Requires an input direction, so
+        // you don't creep up walls just by drifting into them.
+        if !player.flying
+            && s > 0.0
+            && against_wall
+            && wish != Vec3::ZERO
+            && keys.pressed(KeyCode::Space)
+        {
+            player.velocity.y = player.velocity.y.max(WATER_CLIMB_SPEED);
+        }
 
         player.on_ground = false;
-        if step_axis(&world, &mut center, 1, delta.y) {
-            if delta.y < 0.0 {
+        if step_axis(&world, &mut center, 1, player.velocity.y * dt) {
+            if player.velocity.y < 0.0 {
                 player.on_ground = true;
             }
             player.velocity.y = 0.0;
@@ -208,6 +347,29 @@ pub fn player_physics(
         transform.rotation = Quat::from_axis_angle(Vec3::Y, player.yaw)
             * Quat::from_axis_angle(Vec3::X, player.pitch);
     }
+}
+
+/// What fraction of the player's box (0..1) sits inside water blocks.
+///
+/// Only the column under the box centre is sampled: water cells are full cubes
+/// here regardless of their flow level, so a per-cell height test would be noise,
+/// and a single column keeps the buoyancy from jittering as you drift over a
+/// ragged shoreline.
+fn submersion(world: &World, center: Vec3) -> f32 {
+    let min_y = center.y - HALF.y;
+    let max_y = center.y + HALF.y;
+    let x = center.x.floor() as i32;
+    let z = center.z.floor() as i32;
+
+    let mut under = 0.0;
+    for y in (min_y.floor() as i32)..=((max_y - EPS).floor() as i32) {
+        if world.get(x, y, z) == Block::Water {
+            let lo = (y as f32).max(min_y);
+            let hi = ((y + 1) as f32).min(max_y);
+            under += (hi - lo).max(0.0);
+        }
+    }
+    (under / (2.0 * HALF.y)).clamp(0.0, 1.0)
 }
 
 /// Move the box centre along one axis by `amount`, then push it back out of any

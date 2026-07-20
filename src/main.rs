@@ -3,7 +3,9 @@
 //! Controls:
 //!   Mouse        look
 //!   WASD         walk   (Ctrl = sprint)
-//!   Space        jump
+//!   Space        jump; in water, swim up (against a wall, climb out)
+//!   Shift        dive
+//!   Space Space  toggle flight (developer mode) — then Space up, Shift down
 //!   Left click   break block
 //!   Right click  place block (stone)
 //!   Escape       release / recapture the mouse cursor
