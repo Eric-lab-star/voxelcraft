@@ -387,6 +387,12 @@ impl World {
     /// Find a pleasant spawn: the nearest grass column to the map centre whose
     /// surface sits above the waterline. Returns the player box *centre*.
     pub fn find_spawn(&self) -> Vec3 {
+        // The palace has a front door, and arriving anywhere else wastes it:
+        // the whole map is arranged along one axis that starts at 광화문. This
+        // returns `None` on every other map.
+        if let Some(gate) = crate::joseon::approach_spawn(self) {
+            return gate;
+        }
         let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
         for r in 0..(WORLD_X / 2) {
             for dz in -r..=r {

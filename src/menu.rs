@@ -357,6 +357,12 @@ fn respawn(players: &mut Query<&mut Player>, world: &World) {
     for mut player in players.iter_mut() {
         player.center = spawn;
         player.velocity = Vec3::ZERO;
+        // Face north, level. Every map here runs its length along that axis and
+        // 조선 puts 광화문 straight ahead of the spawn — left as it was, you
+        // would arrive at the front gate looking whichever way you happened to
+        // be turned when you opened the menu.
+        player.yaw = 0.0;
+        player.pitch = 0.0;
     }
 }
 

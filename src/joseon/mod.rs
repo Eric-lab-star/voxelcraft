@@ -52,11 +52,33 @@ use style::*;
 use water::*;
 
 
+use crate::block::Block;
 use crate::world::{FLAT_LEVEL, WORLD_X, WORLD_Z, World};
+use bevy::math::Vec3;
 
 /// The level everything is built on. Shared with the blank map so the two flat
 /// worlds sit at the same height.
 const GROUND: i32 = FLAT_LEVEL;
+
+/// Where a visitor arrives: on the axis south of 광화문, outside the wall,
+/// with the gate straight ahead and the whole approach behind it.
+///
+/// Returns `None` for any world that is not this palace. A save records blocks
+/// and nothing else, so a loaded world cannot say which map it is — but the
+/// question is answerable by looking: if 광화문's granite base is standing where
+/// this layout puts it, this is the 조선 map. Any other map has grass there and
+/// falls through to the ordinary spawn search.
+pub(crate) fn approach_spawn(world: &World) -> Option<Vec3> {
+    let (cx, cz) = palace_centre();
+    // A point in the gate's base that is masonry rather than one of its three
+    // passages — the middle of the gate is a way through, not a wall.
+    if world.get(cx + s(3), GROUND + 1, cz + PALACE_SOUTH) != Block::Granite {
+        return None;
+    }
+    let z = cz + PALACE_SOUTH + d(6);
+    let sy = world.surface_y(cx, z);
+    (sy >= 0).then(|| Vec3::new(cx as f32 + 0.5, sy as f32 + 1.9, z as f32 + 0.5))
+}
 
 pub fn generate(_seed: u32) -> World {
     let mut world = World::empty();

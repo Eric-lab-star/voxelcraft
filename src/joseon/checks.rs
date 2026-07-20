@@ -644,3 +644,44 @@ fn every_hall_has_room_in_its_yard() {
         );
     }
 }
+
+/// You arrive outside 광화문, on the axis, with the gate in front of you.
+///
+/// The palace has a front door and the whole map is arranged along the axis
+/// that starts at it. Spawning anywhere else — the old search picked the
+/// nearest grass to the map's centre, which is now somewhere behind 교태전 —
+/// throws that away, and nothing but walking it would show.
+#[test]
+fn you_start_outside_the_main_gate() {
+    let w = generate(1);
+    let (cx, cz) = super::palace_centre();
+    let spawn = w.find_spawn();
+
+    assert!(
+        (spawn.x - (cx as f32 + 0.5)).abs() < 1.0,
+        "spawn is off the axis at x={}",
+        spawn.x
+    );
+    // Outside the wall, not inside the precinct.
+    assert!(
+        spawn.z > (cz + PALACE_SOUTH) as f32,
+        "spawn at z={} is inside the walls (gate at {})",
+        spawn.z,
+        cz + PALACE_SOUTH
+    );
+    // Close enough that the gate is the thing you are looking at.
+    let gap = spawn.z - (cz + PALACE_SOUTH) as f32;
+    assert!(gap < 40.0, "spawn is {gap} blocks from the gate");
+
+    // And standing on something, not in it or over it.
+    let feet = spawn.y - 1.9;
+    assert!(
+        w.get(cx, feet as i32, spawn.z as i32).blocks_movement(),
+        "nothing under the spawn point"
+    );
+    assert_eq!(
+        w.get(cx, feet as i32 + 1, spawn.z as i32),
+        Block::Air,
+        "spawn is inside a block"
+    );
+}
