@@ -13,7 +13,7 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 pub const TILE: usize = 16;
 pub const COLS: usize = 4;
 pub const ROWS: usize = 6;
-pub const NUM_TILES: u32 = 22;
+pub const NUM_TILES: u32 = 23;
 
 // Tile indices within the atlas.
 pub const T_GRASS_TOP: u32 = 0;
@@ -43,6 +43,7 @@ pub const T_GRANITE: u32 = 18;
 pub const T_THATCH: u32 = 19;
 pub const T_CLAY_WALL: u32 = 20;
 pub const T_ROAD: u32 = 21;
+pub const T_SIGNPOST: u32 = 22;
 
 /// Shared handles for the block atlas: the image plus a grid layout so UI
 /// (the hotbar) can address individual tiles by index.
@@ -255,6 +256,7 @@ fn tile_pixel(tile: u32, x: usize, y: usize) -> [u8; 4] {
         T_THATCH => thatch_pixel(x, y, n),
         T_CLAY_WALL => clay_wall_pixel(x, y, n),
         T_ROAD => road_pixel(x, y, n),
+        T_SIGNPOST => signpost_pixel(x, y, n),
         _ => [255, 0, 255, 255], // magenta = missing
     }
 }
@@ -294,6 +296,23 @@ fn clay_wall_pixel(x: usize, y: usize, n: f32) -> [u8; 4] {
         c = shade([142, 116, 84], n, 10.0);
     }
     c
+}
+
+/// One pixel of a 푯말 board: pale planed timber inside a dark frame, with the
+/// suggestion of brushwork down the middle. The frame is what makes it read as
+/// a *board* at a glance rather than as one more wooden block.
+fn signpost_pixel(x: usize, y: usize, n: f32) -> [u8; 4] {
+    let (fx, fy) = (x as i32, y as i32);
+    let edge = fx <= 1 || fy <= 1 || fx >= TILE as i32 - 2 || fy >= TILE as i32 - 2;
+    if edge {
+        return shade([84, 58, 36], n, 8.0);
+    }
+    // Two columns of ink strokes, as a hanging board would carry.
+    let stroke = (fx == 6 || fx == 9) && (3..=12).contains(&fy) && (fy % 3) != 0;
+    if stroke {
+        return shade([48, 40, 36], n, 6.0);
+    }
+    shade([206, 180, 132], n, 12.0)
 }
 
 /// One pixel of a beaten-earth street: compacted dirt with pebbles pressed into
@@ -638,6 +657,7 @@ pub fn block_tile(block: crate::block::Block, face: usize) -> u32 {
         Block::Thatch => T_THATCH,
         Block::ClayWall => T_CLAY_WALL,
         Block::Road => T_ROAD,
+        Block::Signpost => T_SIGNPOST,
     }
 }
 

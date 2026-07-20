@@ -38,6 +38,7 @@ mod compound;
 mod gate;
 mod hall;
 mod path;
+mod sign;
 mod style;
 mod water;
 
@@ -45,6 +46,8 @@ use compound::*;
 use gate::*;
 use hall::*;
 use path::*;
+pub(crate) use sign::signposts;
+use sign::place_signposts;
 use style::*;
 use water::*;
 
@@ -268,6 +271,8 @@ fn place_palace(world: &mut World, gy: i32) {
     // Last, so every gateway it has to meet is already standing. Paths are laid
     // at ground level only, so this cannot disturb any of them.
     lay_paths(world, cx, cz, gy);
+    // The 푯말 last of all, so nothing laid afterwards can bury one.
+    place_signposts(world, gy);
 }
 
 // --- 궁문 (the secondary gates in the precinct wall) ------------------------

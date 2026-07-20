@@ -14,16 +14,16 @@ use bevy::prelude::*;
 const REACH: f32 = 8.0;
 
 /// Result of a voxel raycast.
-struct RayHit {
+pub(crate) struct RayHit {
     /// The solid block that was hit.
-    block: IVec3,
+    pub(crate) block: IVec3,
     /// The empty cell just before it (where a new block would be placed).
     prev: IVec3,
 }
 
 /// Amanatides & Woo fast voxel traversal. Walks the grid from `origin` along
 /// `dir` until it hits a solid block or exceeds `REACH`.
-fn raycast(world: &World, origin: Vec3, dir: Vec3) -> Option<RayHit> {
+pub(crate) fn raycast(world: &World, origin: Vec3, dir: Vec3) -> Option<RayHit> {
     let dir = dir.normalize_or_zero();
     if dir == Vec3::ZERO {
         return None;
@@ -209,5 +209,80 @@ pub fn highlight_target(
 fn mark_dirty(dirty: &mut DirtyChunks, x: i32, z: i32) {
     for (dx, dz) in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)] {
         dirty.0.insert(chunk_of(x + dx, z + dz));
+    }
+}
+
+/// The 푯말 names, looked up by the board's own position.
+///
+/// Built once at startup from the palace layout. It is safe to hold for every
+/// map because a lookup only happens when the ray has already landed on a
+/// `Signpost` block, and no other map has any.
+#[derive(Resource)]
+pub struct SignNames(std::collections::HashMap<IVec3, &'static str>);
+
+pub fn setup_sign_names(mut commands: Commands) {
+    commands.insert_resource(SignNames(
+        crate::joseon::signposts().into_iter().collect(),
+    ));
+}
+
+/// Marks the label that names whatever 푯말 you are looking at.
+#[derive(Component)]
+pub struct SignLabel;
+
+/// The name appears just under the crosshair, where the eye already is when
+/// you are aiming at something, rather than at the top of the screen with the
+/// toasts — those announce that something happened, this describes what you are
+/// looking at now.
+pub fn setup_sign_label(mut commands: Commands) {
+    commands
+        .spawn(Node {
+            width: Val::Percent(100.0),
+            position_type: PositionType::Absolute,
+            top: Val::Percent(56.0),
+            justify_content: JustifyContent::Center,
+            ..default()
+        })
+        .with_children(|row| {
+            row.spawn((
+                Text::new(""),
+                TextFont {
+                    font_size: FontSize::Px(crate::font::PIXEL_GRID * 2.0),
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.96, 0.86)),
+                SignLabel,
+            ));
+        });
+}
+
+/// Show the name of the 푯말 under the crosshair, and nothing when there isn't
+/// one. Written straight from the aim each frame rather than latched on and off,
+/// so it cannot get stuck showing a board you have walked away from.
+pub fn show_sign_name(
+    world: Res<World>,
+    names: Res<SignNames>,
+    menu: Res<crate::menu::MenuState>,
+    player_q: Query<&Player>,
+    mut label_q: Query<&mut Text, With<SignLabel>>,
+) {
+    let Ok(mut text) = label_q.single_mut() else {
+        return;
+    };
+    // Runs even while a menu is up, unlike the rest of the aiming systems,
+    // precisely so it can clear itself. Left in the paused group it simply
+    // stopped updating, and the last name you happened to be looking at stayed
+    // on screen behind the pause overlay.
+    let name = (!menu.ui_focused())
+        .then(|| player_q
+            .single()
+            .ok()
+            .and_then(|player| raycast(&world, player.eye(), player.forward()))
+            .filter(|hit| world.get(hit.block.x, hit.block.y, hit.block.z) == Block::Signpost)
+            .and_then(|hit| names.0.get(&hit.block).copied()))
+        .flatten()
+        .unwrap_or("");
+    if text.0 != name {
+        text.0 = name.to_string();
     }
 }

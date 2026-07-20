@@ -40,6 +40,9 @@ pub enum Block {
     ClayWall,
     /// 흙길 — the beaten-earth surface of a street.
     Road,
+    /// 푯말 — a board on a post, standing in front of a building. Looking at
+    /// one names the building; see `joseon::signpost_name`.
+    Signpost,
 }
 
 impl Block {
@@ -107,6 +110,7 @@ impl Block {
             Block::Thatch => 18,
             Block::ClayWall => 19,
             Block::Road => 20,
+            Block::Signpost => 21,
         }
     }
 
@@ -133,6 +137,7 @@ impl Block {
             18 => Block::Thatch,
             19 => Block::ClayWall,
             20 => Block::Road,
+            21 => Block::Signpost,
             _ => Block::Air,
         }
     }
@@ -161,6 +166,7 @@ impl Block {
             Block::Thatch => Color::srgb(0.78, 0.64, 0.32),
             Block::ClayWall => Color::srgb(0.66, 0.55, 0.40),
             Block::Road => Color::srgb(0.54, 0.46, 0.36),
+            Block::Signpost => Color::srgb(0.62, 0.48, 0.30),
         }
     }
 }

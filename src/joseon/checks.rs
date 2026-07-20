@@ -554,3 +554,38 @@ fn the_library_has_brick_gables() {
     assert!(brick > 40, "집옥재 has no brick gables ({brick})");
     assert_eq!(paper, 0, "집옥재 grew 창호; it is a library, not a hall");
 }
+
+/// Every 푯말 must be standing where it can actually be seen and aimed at.
+///
+/// The positions are worked out by arithmetic from the layout, so a board can
+/// very easily end up inside a wall, on a roof, or in the middle of a pond —
+/// and a buried board is invisible, so nothing else would ever report it.
+#[test]
+fn every_signpost_stands_clear() {
+    let w = generate(1);
+    for (pos, name) in super::signposts() {
+        assert_eq!(
+            w.get(pos.x, pos.y, pos.z),
+            Block::Signpost,
+            "{name}: no board at {pos}"
+        );
+        // Footed on the ground, not floating and not sunk into a platform.
+        let under = w.get(pos.x, GROUND, pos.z);
+        assert!(
+            under.blocks_movement(),
+            "{name}: post stands on {under:?}, not on ground"
+        );
+        // Nothing on top of it, so it is not inside a building or under a roof.
+        assert_eq!(
+            w.get(pos.x, pos.y + 1, pos.z),
+            Block::Air,
+            "{name}: something sits on the board"
+        );
+        // And reachable from at least one side at eye height.
+        let open = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+            .iter()
+            .filter(|(dx, dz)| !w.get(pos.x + dx, pos.y, pos.z + dz).blocks_movement())
+            .count();
+        assert!(open >= 2, "{name}: board is walled in ({open} sides open)");
+    }
+}

@@ -33,7 +33,7 @@ pub struct MenuState {
 
 impl MenuState {
     /// Should the cursor be free for clicking UI?
-    fn ui_focused(&self) -> bool {
+    pub fn ui_focused(&self) -> bool {
         self.open || self.screen == Screen::Title
     }
 }
