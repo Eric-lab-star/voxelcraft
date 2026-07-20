@@ -9,7 +9,7 @@
 //!
 //! ```text
 //!                        신무문   (north gate)
-//!                        향원정   (hexagonal pavilion, on its island)
+//!                        향원정   (hexagonal pavilion, on its island)   건청궁
 //!                        아미산   (terraced garden)
 //!                        교태전   ┐ 무량각 — the king's and
 //!    영추문   수정전     강녕전   ┘ queen's halls have no ridge     자경전
@@ -178,6 +178,23 @@ const GANGNYEONG_Z: i32 = -s(52); // 강녕전, the king's own quarters
 const GYOTAE_Z: i32 = -s(66); // 교태전, the queen's
 /// 향원정, in the rear garden well beyond the living quarters.
 const HYANGWON_Z: i32 = -s(84);
+
+/// 건청궁, in the quarter north-east of the pond. Carrying the north wall out
+/// to make room for 신무문 left this whole corner empty, and it is where the
+/// real 건청궁 stands: off the axis, behind the garden, away from the halls of
+/// state entirely — which is the point of it. It was built as somewhere the
+/// king could live outside the ceremonial palace.
+/// The corner is tighter than it looks. 자경전's yard reaches up to z -94 on
+/// this flank and the garden path to 향원정 runs north at s(16) east of the
+/// axis, so this compound has to sit between the two of them and clear of the
+/// precinct wall as well.
+const GEONCHEONG_X: i32 = s(27);
+const GEONCHEONG_Z: i32 = -s(81);
+const GEONCHEONG_RX: i32 = s(9);
+const GEONCHEONG_RZ: i32 = s(16);
+/// 장안당, the king's side, in front of 곤녕합, the queen's.
+const JANGAN_Z: i32 = -s(8);
+const GONNYEONG_Z: i32 = s(8);
 /// The side compounds, in the strips between the inner yards and the precinct
 /// wall. Their half-width is 7, so a centre of 30 spans 23..37 — clear of both
 /// the court cloister's eaves at 22 and the precinct wall at 38.
@@ -250,6 +267,8 @@ fn place_palace(world: &mut World, gy: i32) {
     place_donggung(world, cx + DONGGUNG_X, cz + DONGGUNG_Z, gy);
     // 향원정 — the hexagonal pavilion in the rear garden, at the far north.
     place_hyangwonjeong(world, cx, cz + HYANGWON_Z, gy);
+    // 건청궁, in the corner beyond it.
+    place_geoncheongung(world, cx + GEONCHEONG_X, cz + GEONCHEONG_Z, gy);
 
     // Last, so every gateway it has to meet is already standing. Paths are laid
     // at ground level only, so this cannot disturb any of them.
@@ -424,6 +443,34 @@ fn place_donggung(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // sleeping hall of the king's, so neither is 무량각.
     place_residence(world, cx, cz + JASEON_Z, gy, HALL_X, HALL_Z, true);
     place_residence(world, cx, cz + BIHYEON_Z, gy, HALL_X, HALL_Z, true);
+}
+
+// --- 건청궁 (the king's private residence, behind the garden) ----------------
+
+/// 건청궁 — 장안당 and 곤녕합 in a walled yard north-east of 향원정.
+///
+/// Deliberately domestic. Everything else in the precinct is a hall of state or
+/// serves one, and 건청궁 was built to be the opposite: a house, off the axis
+/// and behind the garden, which the king could live in away from all of it. So
+/// no 월대, no double roof, and the yard is generous rather than tight.
+fn place_geoncheongung(world: &mut World, cx: i32, cz: i32, gy: i32) {
+    const HALL_X: i32 = s(5);
+    const HALL_Z: i32 = s(3);
+
+    compound_wall(world, cx, cz, gy, GEONCHEONG_RX, GEONCHEONG_RZ, false);
+
+    // Its gateway faces *west*, onto the garden path, rather than south like
+    // every other compound here. 자경전's yard comes up to within three blocks
+    // of this one's south wall, so there is no room for an approach on that
+    // side at all — and the way anyone actually arrives is from the pond.
+    for dz in -1..=1 {
+        for h in 1..=WALL_H {
+            world.set(cx - GEONCHEONG_RX, gy + h, cz + dz, Block::Air);
+        }
+    }
+
+    place_residence(world, cx, cz + JANGAN_Z, gy, HALL_X, HALL_Z, true);
+    place_residence(world, cx, cz + GONNYEONG_Z, gy, HALL_X, HALL_Z, true);
 }
 
 // --- 향원정 (the pavilion in the rear garden) --------------------------------
@@ -1242,9 +1289,21 @@ fn lay_paths(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // the pond — which is how you walk it in the real palace.
     let round_x = cx + s(16);
     let pond_z = cz + HYANGWON_Z + s(9);
+    // The garden run carries on north past the turn to the bridge, because
+    // 건청궁 is further up still and is entered off the side of it.
+    let gc_z = cz + GEONCHEONG_Z;
     pave(world, gy, cx, spine_end, round_x, spine_end, Block::Road);
-    pave(world, gy, round_x, spine_end, round_x, pond_z, Block::Road);
+    pave(world, gy, round_x, spine_end, round_x, gc_z, Block::Road);
     pave(world, gy, round_x, pond_z, cx, pond_z, Block::Road);
+    pave(
+        world,
+        gy,
+        round_x,
+        gc_z,
+        cx + GEONCHEONG_X - GEONCHEONG_RX,
+        gc_z,
+        Block::Road,
+    );
 
     // Spurs to the compounds either side. Every compound gateway is in its
     // *south* face, so each spur runs out along a clear latitude below the
@@ -1525,6 +1584,8 @@ mod checks {
             // missing and the other has quietly grown over the gap.
             ("자선당", cx + DONGGUNG_X, cz + DONGGUNG_Z + JASEON_Z),
             ("비현각", cx + DONGGUNG_X, cz + DONGGUNG_Z + BIHYEON_Z),
+            ("장안당", cx + GEONCHEONG_X, cz + GEONCHEONG_Z + JANGAN_Z),
+            ("곤녕합", cx + GEONCHEONG_X, cz + GEONCHEONG_Z + GONNYEONG_Z),
             ("향원정", cx, cz + HYANGWON_Z),
         ] {
             let columns = count_in(&w, x, z, 8, 8, Block::RedPillar);
@@ -1724,6 +1785,12 @@ mod checks {
             ("강녕전", cx, cz + GANGNYEONG_Z + s(4) + 2),
             ("교태전", cx, cz + GYOTAE_Z + s(4) + 2),
             ("향원정", cx, cz + HYANGWON_Z + s(9)),
+            // Entered from the west, off the garden path.
+            (
+                "건청궁",
+                cx + GEONCHEONG_X - GEONCHEONG_RX,
+                cz + GEONCHEONG_Z,
+            ),
             ("자경전", cx + JAGYEONG_X, cz + JAGYEONG_Z + s(11)),
             ("동궁", cx + DONGGUNG_X, cz + DONGGUNG_Z + DONGGUNG_RZ),
             ("수정전", cx + SUJEONG_X, cz + SUJEONG_Z + s(8)),
