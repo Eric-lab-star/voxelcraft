@@ -186,11 +186,21 @@ const JAGYEONG_Z: i32 = -s(52);
 const SUJEONG_X: i32 = -s(30); // 수정전, west of the axis
 const SUJEONG_Z: i32 = -s(36);
 const DONGGUNG_X: i32 = s(30); // 동궁, the crown prince's quarters
+/// 동궁's compound. The east flank is only 24 blocks of clear ground between
+/// the court's cloister and the precinct wall, so its two halls cannot stand
+/// side by side however the real ones are drawn — the yard runs deep instead
+/// and puts one behind the other.
+const DONGGUNG_RX: i32 = s(7);
+const DONGGUNG_RZ: i32 = s(15);
+/// 자선당, where the crown prince lived, in front of 비현각, where he was
+/// taught. Offsets from the compound's centre.
+const JASEON_Z: i32 = -s(8);
+const BIHYEON_Z: i32 = s(8);
 /// 동궁 and 자경전 share the east flank, and at -34 their compound walls
 /// overlapped by two blocks — the two yards ran into one another with no gap
 /// between. Moved south far enough to separate them and to leave a gap in the
 /// east wall wide enough for 건춘문.
-const DONGGUNG_Z: i32 = -s(26);
+const DONGGUNG_Z: i32 = -s(18);
 
 /// Half-extents of the throne hall's two 월대 terraces.
 const WOLDAE_OUTER: (i32, i32) = (s(15), s(12));
@@ -237,8 +247,7 @@ fn place_palace(world: &mut World, gy: i32) {
     // bare ground between the cloister and the precinct wall.
     compound_wall(world, cx + SUJEONG_X, cz + SUJEONG_Z, gy, s(7), s(8), false);
     place_residence(world, cx + SUJEONG_X, cz + SUJEONG_Z, gy, s(5), s(4), true);
-    compound_wall(world, cx + DONGGUNG_X, cz + DONGGUNG_Z, gy, s(7), s(8), false);
-    place_residence(world, cx + DONGGUNG_X, cz + DONGGUNG_Z, gy, s(5), s(4), true);
+    place_donggung(world, cx + DONGGUNG_X, cz + DONGGUNG_Z, gy);
     // 향원정 — the hexagonal pavilion in the rear garden, at the far north.
     place_hyangwonjeong(world, cx, cz + HYANGWON_Z, gy);
 
@@ -388,6 +397,33 @@ fn place_jagyeongjeon(world: &mut World, cx: i32, cz: i32, gy: i32) {
     }
     world.set(cx, gy + s(6) + 1, chimney_z, Block::Dancheong);
     world.set(cx, gy + s(6) + 2, chimney_z, Block::RoofTile);
+}
+
+// --- 동궁 (the crown prince's quarters) --------------------------------------
+
+/// 동궁 — 자선당 and 비현각 in one walled yard, one behind the other.
+///
+/// It was a single generic hall before, which is the one thing 동궁 is not: the
+/// crown prince had a residence and, separately, a place he was taught in, and
+/// the pair of them is what distinguishes this compound from every other walled
+/// yard on the flanks.
+///
+/// Both are deliberately smaller than the halls on the axis. This is the heir's
+/// establishment, not the king's, and building them at 침전 scale would have
+/// them reading as more important than 사정전 across the way.
+fn place_donggung(world: &mut World, cx: i32, cz: i32, gy: i32) {
+    // Sized so the roofs clear the yard wall by three blocks rather than
+    // filling it. At s(4) the eaves came within a block of the 담장 on both
+    // sides and the whole compound read as a lid rather than as a yard with
+    // buildings standing in it.
+    const HALL_X: i32 = s(3);
+    const HALL_Z: i32 = s(3);
+
+    compound_wall(world, cx, cz, gy, DONGGUNG_RX, DONGGUNG_RZ, false);
+    // 자선당 in front, 비현각 behind it. Both keep their ridge — neither is a
+    // sleeping hall of the king's, so neither is 무량각.
+    place_residence(world, cx, cz + JASEON_Z, gy, HALL_X, HALL_Z, true);
+    place_residence(world, cx, cz + BIHYEON_Z, gy, HALL_X, HALL_Z, true);
 }
 
 // --- 향원정 (the pavilion in the rear garden) --------------------------------
@@ -1218,7 +1254,7 @@ fn lay_paths(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // buried under it, so on the ground it simply stopped at a wall.
     for (gate_x, gate_z) in [
         (cx + JAGYEONG_X, cz + JAGYEONG_Z + s(11)), // 자경전
-        (cx + DONGGUNG_X, cz + DONGGUNG_Z + s(8)),  // 동궁
+        (cx + DONGGUNG_X, cz + DONGGUNG_Z + DONGGUNG_RZ), // 동궁
         (cx + SUJEONG_X, cz + SUJEONG_Z + s(8)),    // 수정전
     ] {
         let approach = gate_z + s(4);
@@ -1483,7 +1519,12 @@ mod checks {
             ("교태전", cx, cz + GYOTAE_Z),
             ("자경전", cx + JAGYEONG_X, cz + JAGYEONG_Z),
             ("수정전", cx + SUJEONG_X, cz + SUJEONG_Z),
-            ("동궁", cx + DONGGUNG_X, cz + DONGGUNG_Z),
+            // 동궁 is checked as its two halls rather than as one compound:
+            // counting from the middle of the yard reaches into both, so a
+            // single check there passes just as happily when one of them is
+            // missing and the other has quietly grown over the gap.
+            ("자선당", cx + DONGGUNG_X, cz + DONGGUNG_Z + JASEON_Z),
+            ("비현각", cx + DONGGUNG_X, cz + DONGGUNG_Z + BIHYEON_Z),
             ("향원정", cx, cz + HYANGWON_Z),
         ] {
             let columns = count_in(&w, x, z, 8, 8, Block::RedPillar);
@@ -1684,7 +1725,7 @@ mod checks {
             ("교태전", cx, cz + GYOTAE_Z + s(4) + 2),
             ("향원정", cx, cz + HYANGWON_Z + s(9)),
             ("자경전", cx + JAGYEONG_X, cz + JAGYEONG_Z + s(11)),
-            ("동궁", cx + DONGGUNG_X, cz + DONGGUNG_Z + s(8)),
+            ("동궁", cx + DONGGUNG_X, cz + DONGGUNG_Z + DONGGUNG_RZ),
             ("수정전", cx + SUJEONG_X, cz + SUJEONG_Z + s(8)),
             ("경회루", cx - s(30) + s(7), cz - s(8)),
         ] {
