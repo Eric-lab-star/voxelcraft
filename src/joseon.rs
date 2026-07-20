@@ -8,10 +8,12 @@
 //! ceremonial buildings at the south end, the ones the court lived in behind:
 //!
 //! ```text
+//!                        신무문   (north gate)
 //!                        향원정   (hexagonal pavilion, on its island)
 //!                        아미산   (terraced garden)
 //!                        교태전   ┐ 무량각 — the king's and
-//!             수정전     강녕전   ┘ queen's halls have no ridge     자경전
+//!    영추문   수정전     강녕전   ┘ queen's halls have no ridge     자경전
+//!                                                                  건춘문
 //!                        사정전   (the council hall)               동궁
 //!                        근정전   (throne hall, on its 월대)
 //!         회랑 ┌──────────────┐ 회랑     경회루 ── on its pond
@@ -151,7 +153,11 @@ const PALACE_X: i32 = s(38);
 /// court sit at the south end, and the halls the royal family actually lived in
 /// run away north behind them.
 const PALACE_SOUTH: i32 = s(30);
-const PALACE_NORTH: i32 = s(94);
+/// The north wall used to stand two blocks off 향원정's pond, which left no
+/// room at all for 신무문 in it. Carried further out instead of squeezing the
+/// pond: the real palace has a whole quarter up here, and this is where it
+/// would go.
+const PALACE_NORTH: i32 = s(100);
 /// Palace roofs step in 2 per course. At `step` 1 a hall this wide would carry a
 /// roof taller than the building; 2 gives the shallow pitch of the real thing.
 const PALACE_STEP: i32 = 2;
@@ -180,7 +186,11 @@ const JAGYEONG_Z: i32 = -s(52);
 const SUJEONG_X: i32 = -s(30); // 수정전, west of the axis
 const SUJEONG_Z: i32 = -s(36);
 const DONGGUNG_X: i32 = s(30); // 동궁, the crown prince's quarters
-const DONGGUNG_Z: i32 = -s(34);
+/// 동궁 and 자경전 share the east flank, and at -34 their compound walls
+/// overlapped by two blocks — the two yards ran into one another with no gap
+/// between. Moved south far enough to separate them and to leave a gap in the
+/// east wall wide enough for 건춘문.
+const DONGGUNG_Z: i32 = -s(26);
 
 /// Half-extents of the throne hall's two 월대 terraces.
 const WOLDAE_OUTER: (i32, i32) = (s(15), s(12));
@@ -194,6 +204,10 @@ fn place_palace(world: &mut World, gy: i32) {
     lay_courtyard(world, cx, cz, gy);
     build_wall(world, cx, cz, gy);
     place_gate(world, cx, cz + PALACE_SOUTH, gy);
+    // The three lesser gates, so the precinct is not a walled box with one door.
+    place_wall_gate(world, cx - PALACE_X, cz + YEONGCHU_Z, gy, false); // 영추문
+    place_wall_gate(world, cx + PALACE_X, cz + GEONCHUN_Z, gy, false); // 건춘문
+    place_wall_gate(world, cx, cz - PALACE_NORTH, gy, true); // 신무문
 
     // The inner court, on the central axis: 근정문 in its south side, the ranked
     // stones down the middle, 근정전 at the head of it, and 회랑 all the way
@@ -761,6 +775,103 @@ fn cloister_run(
         (HALF_W, half_len)
     };
     lay_roof(world, cx, cz, bx, bz, gy + CLOISTER_H + 3, 1, 1, true);
+}
+
+// --- 궁문 (the secondary gates in the precinct wall) ------------------------
+
+/// Where 영추문, 건춘문 and 신무문 stand, as offsets from the precinct centre.
+/// The two side gates sit in the gaps between the compounds along each flank —
+/// 수정전 and 경회루's pond on the west, 자경전 and 동궁 on the east.
+const YEONGCHU_Z: i32 = -s(24);
+const GEONCHUN_Z: i32 = -s(38);
+
+/// 영추문 / 건춘문 / 신무문 — a gate through the precinct wall.
+///
+/// Until now 광화문 was the only way in or out of a walled precinct 114 by 200
+/// blocks: three sides were unbroken from end to end. These are the lesser
+/// gates, one passage rather than 광화문's three and a much lighter base, which
+/// is what they are — the everyday doors into the palace, not the ceremonial
+/// one.
+///
+/// `along_x` says which way the wall runs here, since the gate has to lie in it
+/// either way round: the north gate spans X, the two flank gates span Z.
+fn place_wall_gate(world: &mut World, cx: i32, cz: i32, gy: i32, along_x: bool) {
+    /// Half-width along the wall, and half-depth across it. Nine blocks
+    /// across is as wide as the gaps between the flank compounds allow, and
+    /// about right for a gate that is not the ceremonial one.
+    const HALF: i32 = s(3);
+    const THICK: i32 = s(2);
+    const BASE_H: i32 = s(4);
+    const PASS: i32 = s(1);
+
+    let at = |t: i32, w: i32| {
+        if along_x {
+            (cx + t, cz + w)
+        } else {
+            (cx + w, cz + t)
+        }
+    };
+
+    // A granite base filling the wall's thickness, then the passage cut back
+    // out of it. Building solid first means the gate replaces whatever run of
+    // 담장 it lands on rather than having to be fitted around it.
+    for t in -HALF..=HALF {
+        for w in -THICK..=THICK {
+            let (x, z) = at(t, w);
+            for h in 1..=BASE_H {
+                world.set(x, gy + h, z, Block::Granite);
+            }
+        }
+    }
+    for t in -PASS..=PASS {
+        for w in -THICK..=THICK {
+            let (x, z) = at(t, w);
+            for h in 1..=(BASE_H - 1) {
+                // Round the head of the opening so it reads as an arch.
+                if h == BASE_H - 1 && t.abs() == PASS {
+                    continue;
+                }
+                world.set(x, gy + h, z, Block::Air);
+            }
+        }
+    }
+
+    // The painted storey over it, and its roof.
+    let floor = gy + BASE_H + 1;
+    const STOREY_H: i32 = s(2);
+    for h in 0..STOREY_H {
+        for t in -HALF..=HALF {
+            for w in -THICK..=THICK {
+                if t.abs() != HALF && w.abs() != THICK {
+                    continue;
+                }
+                let (x, z) = at(t, w);
+                let post = t.rem_euclid(BAY) == 0 || (t.abs() == HALF && w.abs() == THICK);
+                world.set(
+                    x,
+                    floor + h,
+                    z,
+                    if post { Block::RedPillar } else { Block::Paper },
+                );
+            }
+        }
+    }
+    let beam = floor + STOREY_H;
+    for t in -HALF..=HALF {
+        for w in -THICK..=THICK {
+            if t.abs() == HALF || w.abs() == THICK {
+                let (x, z) = at(t, w);
+                world.set(x, beam, z, Block::Dancheong);
+            }
+        }
+    }
+    let (bx, bz) = if along_x {
+        (HALF, THICK)
+    } else {
+        (THICK, HALF)
+    };
+    let eave = lay_brackets(world, cx, cz, bx, bz, beam + 1);
+    lay_roof(world, cx, cz, bx, bz, eave, EAVES, PALACE_STEP, true);
 }
 
 // --- 흥례문 권역 (the outer approach) ---------------------------------------
@@ -1646,6 +1757,44 @@ mod checks {
             seen.contains(&goal),
             "no way past the halls except over their terraces"
         );
+    }
+
+    /// All four gates are ways through, not decorated bulges in the wall.
+    ///
+    /// A gate that lands on top of a neighbouring compound comes out looking
+    /// perfectly correct from outside while its passage opens into that
+    /// compound's wall — 건춘문 was first placed squarely inside 자경전's yard,
+    /// and nothing but walking it would have shown that.
+    #[test]
+    fn every_gate_opens_through_the_wall() {
+        let w = generate(1);
+        let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+        for (name, gx, gz, along_x) in [
+            ("광화문", cx, cz + PALACE_SOUTH, true),
+            ("영추문", cx - PALACE_X, cz + YEONGCHU_Z, false),
+            ("건춘문", cx + PALACE_X, cz + GEONCHUN_Z, false),
+            ("신무문", cx, cz - PALACE_NORTH, true),
+        ] {
+            // Straight through on the centre line, from outside the wall to
+            // well inside it. Tested as "is there somewhere to stand with room
+            // overhead", not "is this air": the 삼도's centre lane runs raised
+            // through 광화문's passage, and walking the axis means walking on
+            // top of it.
+            let standable = |x: i32, z: i32| {
+                [GROUND + 1, GROUND].into_iter().any(|y| {
+                    w.get(x, y, z).blocks_movement()
+                        && !w.get(x, y + 1, z).blocks_movement()
+                        && !w.get(x, y + 2, z).blocks_movement()
+                })
+            };
+            for d in -s(4)..=s(4) {
+                let (x, z) = if along_x { (gx, gz + d) } else { (gx + d, gz) };
+                assert!(
+                    standable(x, z),
+                    "{name}: no way through {d} from the centre of the passage"
+                );
+            }
+        }
     }
 
     /// Nothing may touch the ceiling or the edge of the playable area.
