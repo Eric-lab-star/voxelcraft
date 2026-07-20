@@ -25,9 +25,8 @@ pub const CHUNK_SIZE: i32 = 16;
 /// screen, which is where the world gets built anyway. Memory is 151MB
 /// resident, two bytes a cell.
 ///
-/// A save slot is 72MB, which is the number to watch. The format is still one
-/// raw byte per block and these worlds are almost entirely air and flat ground,
-/// so run-length encoding would take nearly all of that back.
+/// A save slot is 220KB on the 조선 map and 2MB on the meadow, the format being
+/// run-length encoded.
 pub const WORLD_X: i32 = 768;
 pub const WORLD_Z: i32 = 768;
 /// Vertical extent. At 64 the palace had 31 blocks of headroom above
@@ -266,15 +265,43 @@ impl World {
         }
     }
 
-    /// Serialise the world to a simple `VOX1` file (magic + dims + one byte
-    /// per block).
+    /// Serialise the world to a `VOX2` file: magic, dimensions, then the blocks
+    /// run-length encoded as `(count: u16, id: u8)` pairs.
+    ///
+    /// Raw, a slot was 72MB — three-quarters of a gigabyte across the save
+    /// slots — and these worlds are almost entirely air above a flat plain, so
+    /// nearly all of that was the same byte repeated. Runs cap at `u16::MAX` and
+    /// simply continue in the next pair, which costs three bytes per 65535 and
+    /// saves writing a variable-length integer.
     pub fn save(&self, path: &str) -> std::io::Result<()> {
-        let mut buf = Vec::with_capacity(self.blocks.len() + 16);
-        buf.extend_from_slice(b"VOX1");
+        let mut buf = Vec::with_capacity(1 << 16);
+        buf.extend_from_slice(b"VOX2");
         buf.extend_from_slice(&WORLD_X.to_le_bytes());
         buf.extend_from_slice(&WORLD_Y.to_le_bytes());
         buf.extend_from_slice(&WORLD_Z.to_le_bytes());
-        buf.extend(self.blocks.iter().map(|b| b.to_id()));
+
+        let mut push = |id: u8, count: u32| {
+            let mut left = count;
+            while left > 0 {
+                let n = left.min(u16::MAX as u32);
+                buf.extend_from_slice(&(n as u16).to_le_bytes());
+                buf.push(id);
+                left -= n;
+            }
+        };
+        let mut run_id = self.blocks[0].to_id();
+        let mut run_len: u32 = 0;
+        for b in &self.blocks {
+            let id = b.to_id();
+            if id == run_id {
+                run_len += 1;
+            } else {
+                push(run_id, run_len);
+                run_id = id;
+                run_len = 1;
+            }
+        }
+        push(run_id, run_len);
         std::fs::write(path, buf)
     }
 
@@ -282,18 +309,31 @@ impl World {
     /// missing, corrupt, or was made with different world dimensions.
     pub fn load(path: &str) -> Option<Self> {
         let data = std::fs::read(path).ok()?;
-        if data.len() < 16 || &data[0..4] != b"VOX1" {
+        if data.len() < 16 || &data[0..4] != b"VOX2" {
             return None;
         }
         let dims = |o: usize| i32::from_le_bytes(data[o..o + 4].try_into().unwrap());
         if dims(4) != WORLD_X || dims(8) != WORLD_Y || dims(12) != WORLD_Z {
             return None;
         }
+        let cells = (WORLD_X * WORLD_Y * WORLD_Z) as usize;
         let body = &data[16..];
-        if body.len() != (WORLD_X * WORLD_Y * WORLD_Z) as usize {
+        if body.len() % 3 != 0 {
             return None;
         }
-        let blocks: Vec<Block> = body.iter().map(|&b| Block::from_id(b)).collect();
+        let mut blocks: Vec<Block> = Vec::with_capacity(cells);
+        for pair in body.chunks_exact(3) {
+            let n = u16::from_le_bytes([pair[0], pair[1]]) as usize;
+            // A corrupt file must not be able to make us allocate the world
+            // several times over before we notice.
+            if blocks.len() + n > cells {
+                return None;
+            }
+            blocks.extend(std::iter::repeat_n(Block::from_id(pair[2]), n));
+        }
+        if blocks.len() != cells {
+            return None;
+        }
         // Treat all saved water as full source blocks.
         let levels = blocks
             .iter()
@@ -386,6 +426,60 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A save must come back exactly as it went in.
+    ///
+    /// Run-length encoding is the kind of change that can lose a block here and
+    /// there and still load something that looks broadly right — an off-by-one
+    /// on a run boundary shifts every cell after it, and a palace rebuilt one
+    /// block out of place is not obviously wrong until you walk into a wall.
+    #[test]
+    fn a_save_round_trips_exactly() {
+        let before = World::generate(MapKind::Joseon, 7);
+        let path = std::env::temp_dir().join("voxelcraft-roundtrip.sav");
+        let path = path.to_str().unwrap();
+        before.save(path).expect("save failed");
+        let after = World::load(path).expect("load failed");
+        let _ = std::fs::remove_file(path);
+
+        for z in (0..WORLD_Z).step_by(3) {
+            for x in (0..WORLD_X).step_by(3) {
+                for y in 0..WORLD_Y {
+                    assert_eq!(
+                        before.get(x, y, z),
+                        after.get(x, y, z),
+                        "block changed at ({x},{y},{z})"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Truncated or scrambled files must be refused, not half-loaded.
+    #[test]
+    fn a_corrupt_save_is_refused() {
+        let w = World::generate(MapKind::Flat, 1);
+        let path = std::env::temp_dir().join("voxelcraft-corrupt.sav");
+        let path = path.to_str().unwrap();
+        w.save(path).unwrap();
+        let good = std::fs::read(path).unwrap();
+
+        // Cut a run out of the middle: the block count no longer adds up.
+        let mut short = good.clone();
+        short.truncate(good.len() - 3);
+        std::fs::write(path, &short).unwrap();
+        assert!(World::load(path).is_none(), "a short file loaded");
+
+        // Claim runs that overrun the world several times over.
+        let mut huge = good[..16].to_vec();
+        for _ in 0..64 {
+            huge.extend_from_slice(&u16::MAX.to_le_bytes());
+            huge.push(0);
+        }
+        std::fs::write(path, &huge).unwrap();
+        assert!(World::load(path).is_none(), "an overlong file loaded");
+        let _ = std::fs::remove_file(path);
+    }
 
     /// The flat map is a blank canvas: ground and nothing else. No decorate
     /// pass, no trees, no water — if any of those ever leak into it, the point
