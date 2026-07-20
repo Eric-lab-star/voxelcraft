@@ -15,7 +15,11 @@ pub const CHUNK_SIZE: i32 = 16;
 /// World size in blocks.
 pub const WORLD_X: i32 = 256;
 pub const WORLD_Z: i32 = 256;
-pub const WORLD_Y: i32 = 64;
+/// Vertical extent. At 64 the palace had 31 blocks of headroom above
+/// `FLAT_LEVEL` — 근정전 already used 18 of them, which left no room to build
+/// its halls at a size where 공포 brackets and a swept 처마 are more than one
+/// block each. 128 buys that room, and the ridge line behind the palace later.
+pub const WORLD_Y: i32 = 128;
 
 /// Sea level in blocks.
 pub const SEA_LEVEL: i32 = 24;
