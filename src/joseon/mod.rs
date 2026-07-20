@@ -129,6 +129,25 @@ const TAEWON_RZ: i32 = s(14);
 /// The shrine hall stands deep in its yard, at the back of the court.
 const TAEWON_HALL_Z: i32 = -s(6);
 
+/// 함화당 and 집경당, in the west-central ground between 태원전 and 수정전.
+///
+/// This is the last piece of open ground inside the walls with room for a
+/// compound in it — 34 blocks by 26. The others the map still shows are past
+/// fitting: 집옥재's corner beside 건청궁 is nine blocks wide once the garden
+/// path is out of it, and the strips either side of 교태전 are eleven, which a
+/// yard wall and two sets of eaves would fill on their own.
+const HAMHWA_X: i32 = -s(26);
+const HAMHWA_Z: i32 = -s(53);
+const HAMHWA_RX: i32 = s(11);
+const HAMHWA_RZ: i32 = s(7);
+/// The two halls stand side by side, the ground here being wider than deep.
+///
+/// How far apart is fixed rather than chosen: the yard is 33 blocks across and
+/// each hall's roof is 13 of them, so there are 7 to share out — two to each
+/// wall and three between the pair. At `s(5)` they sat a single block apart and
+/// read as one building with a seam down it.
+const HAMHWA_SPREAD: i32 = 8;
+
 /// The side compounds, in the strips between the inner yards and the precinct
 /// wall. Their half-width is 7, so a centre of 30 spans 23..37 — clear of both
 /// the court cloister's eaves at 22 and the precinct wall at 38.
@@ -214,6 +233,8 @@ fn place_palace(world: &mut World, gy: i32) {
     place_geoncheongung(world, cx + GEONCHEONG_X, cz + GEONCHEONG_Z, gy);
     // 태원전, in the matching corner to the west.
     place_taewonjeon(world, cx + TAEWON_X, cz + TAEWON_Z, gy);
+    // 함화당 and 집경당, in the west-central ground.
+    place_hamhwadang(world, cx + HAMHWA_X, cz + HAMHWA_Z, gy);
     // 소주방, in the service strip behind 강녕전.
     place_sojubang(world, cx + SOJU_X, cz + SOJU_Z, gy);
 

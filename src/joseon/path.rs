@@ -308,6 +308,14 @@ pub(super) fn lay_paths(world: &mut World, cx: i32, cz: i32, gy: i32) {
         Block::Road,
     );
 
+    // 함화당's yard, off the west flank. Its gateway is in the south face like
+    // the rest, so the spur runs out below it and turns up.
+    let hh_x = cx + HAMHWA_X;
+    let hh_gate = cz + HAMHWA_Z + HAMHWA_RZ;
+    let hh_approach = hh_gate + s(4);
+    pave(world, gy, cx - BYPASS_X, hh_approach, hh_x, hh_approach, Block::Road);
+    pave(world, gy, hh_x, hh_approach, hh_x, hh_gate, Block::Road);
+
     // 태원전, off the north end of the west flank. Its gateway is in the south
     // face, so the spur runs out level with the flank's end and then turns up
     // into it.

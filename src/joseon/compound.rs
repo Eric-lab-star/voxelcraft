@@ -216,3 +216,22 @@ pub(super) fn place_sojubang(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // overhung another.
     lay_range(world, cx - s(1), cz - s(4), gy, s(3), true);
 }
+
+/// 함화당 and 집경당 — a pair of halls in one yard, west of the axis.
+///
+/// Side by side rather than one behind the other, which every other paired
+/// compound here does. The ground is 34 blocks across and 26 deep, so the long
+/// dimension is east-west for once and the halls follow it — and the map shows
+/// them abreast in any case.
+///
+/// They are small. Two platforms across a yard this wide leaves three blocks
+/// between them and three to each wall, which is the whole budget: build them
+/// at 침전 scale and the pair meets in the middle with no yard at all.
+pub(super) fn place_hamhwadang(world: &mut World, cx: i32, cz: i32, gy: i32) {
+    const HALL_X: i32 = s(2);
+    const HALL_Z: i32 = s(3);
+
+    compound_wall(world, cx, cz, gy, HAMHWA_RX, HAMHWA_RZ, false);
+    place_residence(world, cx - HAMHWA_SPREAD, cz, gy, HALL_X, HALL_Z, true);
+    place_residence(world, cx + HAMHWA_SPREAD, cz, gy, HALL_X, HALL_Z, true);
+}
