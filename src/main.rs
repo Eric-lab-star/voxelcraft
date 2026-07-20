@@ -16,6 +16,7 @@ mod clouds;
 mod daynight;
 mod hotbar;
 mod interaction;
+mod font;
 mod menu;
 mod mesh;
 mod particles;
@@ -49,6 +50,9 @@ fn main() {
         // Registers the greedy-mesh terrain material + its embedded shader.
         .add_plugins(voxel_material::VoxelMaterialPlugin)
         // Registers the Gerstner-wave water material + its embedded shader.
+        // Swaps in a Hangul-capable UI font. Must come after `DefaultPlugins`,
+        // which is what creates the font assets it replaces.
+        .add_plugins(font::FontPlugin)
         .add_plugins(water_material::WaterMaterialPlugin)
         .insert_resource(ClearColor(Color::srgb(0.53, 0.74, 0.92)))
         // Lower ambient so the sun and the per-face shading create real

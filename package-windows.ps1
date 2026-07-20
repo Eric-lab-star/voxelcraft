@@ -4,9 +4,10 @@
 # Output:  dist/voxelcraft-windows/            (the runnable folder)
 #          dist/voxelcraft-windows-x64.zip     (zipped for sharing)
 #
-# voxelcraft has no external asset files (all textures are generated in code),
-# so the bundle is just the release .exe plus a short readme. Saves are written
-# next to the .exe as world_N.sav.
+# voxelcraft loads no asset files at runtime — textures are generated in code and
+# the UI font is compiled into the binary — so the bundle is just the release
+# .exe plus a readme and the font licence. Saves are written next to the .exe as
+# world_N.sav.
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
@@ -25,6 +26,9 @@ New-Item -ItemType Directory -Force -Path $out | Out-Null
 
 Copy-Item $exe $out
 Copy-Item (Join-Path $root "README.md") $out
+# The SIL Open Font License requires its text to travel with the font, and the
+# font is compiled into the .exe — so it has to be in the bundle.
+Copy-Item (Join-Path $root "assets\fonts\Galmuri-OFL.txt") $out
 
 @"
 voxelcraft — Windows build

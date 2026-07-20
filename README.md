@@ -117,6 +117,17 @@ All logic lives in `src/`, one module per concern:
 
 Rust · Bevy 0.19 · `noise` (Perlin terrain) · `winit` (window icon).
 
+## Credits
+
+UI text is set in **[Galmuri11](https://galmuri.quiple.dev/)** by Lee Minseo, a
+Hangul pixel font used under the [SIL Open Font License 1.1](assets/fonts/Galmuri-OFL.txt).
+Bevy's bundled default font covers only Latin, so Korean rendered as blank space
+without it. The font is compiled into the binary; the licence text ships
+alongside the executable.
+
+Everything else — every block texture, the cloud layer, the window icon — is
+generated procedurally in code.
+
 ---
 
 *Built as a from-scratch learning project — a walkable, buildable voxel world in
