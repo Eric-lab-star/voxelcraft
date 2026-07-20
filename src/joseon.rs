@@ -245,6 +245,8 @@ fn place_palace(world: &mut World, gy: i32) {
     place_wall_gate(world, cx - PALACE_X, cz + YEONGCHU_Z, gy, false); // 영추문
     place_wall_gate(world, cx + PALACE_X, cz + GEONCHUN_Z, gy, false); // 건춘문
     place_wall_gate(world, cx, cz - PALACE_NORTH, gy, true); // 신무문
+    // 동십자각, on the corner the wall turns at.
+    place_corner_tower(world, cx + PALACE_X, cz + PALACE_SOUTH, gy);
 
     // The inner court, on the central axis: 근정문 in its south side, the ranked
     // stones down the middle, 근정전 at the head of it, and 회랑 all the way
@@ -990,6 +992,83 @@ fn place_wall_gate(world: &mut World, cx: i32, cz: i32, gy: i32, along_x: bool) 
     };
     let eave = lay_brackets(world, cx, cz, bx, bz, beam + 1);
     lay_roof(world, cx, cz, bx, bz, eave, EAVES, PALACE_STEP, true);
+}
+
+// --- 동십자각 (the corner watchtower) ---------------------------------------
+
+/// 동십자각 — the watchtower on the south-east corner of the wall.
+///
+/// The first thing here that is neither a hall nor a gate. Everything else in
+/// the precinct is a roof on a platform inside a yard; this is a solid block of
+/// masonry taller than anything around it with an open pavilion on top, and it
+/// straddles the corner rather than standing behind the wall, so the wall runs
+/// into it from two directions and stops.
+///
+/// The base has to out-top the 담장 by a clear margin or the whole thing reads
+/// as a lump in the wall rather than as something built to see over it: nine
+/// courses against the wall's six, and two more than 광화문's.
+///
+/// The pavilion is drawn in from the base's edge, leaving a walkway round it —
+/// which is what the tower is *for*, and without it the roof would sit on the
+/// masonry like a cap.
+fn place_corner_tower(world: &mut World, cx: i32, cz: i32, gy: i32) {
+    const HALF: i32 = s(4);
+    const BASE_H: i32 = s(6);
+    /// How far the pavilion stands in from the edge of the base.
+    const INSET: i32 = s(1) + 1;
+
+    for dz in -HALF..=HALF {
+        for dx in -HALF..=HALF {
+            for h in 1..=BASE_H {
+                world.set(cx + dx, gy + h, cz + dz, Block::Granite);
+            }
+        }
+    }
+
+    // A stair down the inward face, so the tower can actually be climbed. It
+    // runs north into the precinct, dropping a course a block, and lands on the
+    // courtyard paving.
+    //
+    // Set well inside the wall line rather than on it. Run straight north off
+    // the corner it cut a descending notch through the 담장 for its whole
+    // length — and since it bottoms out a block above the ground, that notch
+    // was a step up onto the wall from *outside* the palace and a walkway in.
+    let stair_x = cx - HALF + 2;
+    for step in 0..BASE_H {
+        let z = cz - HALF - 1 - step;
+        for dx in -1..=1 {
+            world.set(stair_x + dx, gy + BASE_H - step, z, Block::Granite);
+            for h in 1..=s(2) {
+                world.set(stair_x + dx, gy + BASE_H - step + h, z, Block::Air);
+            }
+        }
+    }
+
+    // The pavilion: an open colonnade, no infill — it is a lookout.
+    let (px, floor) = (HALF - INSET, gy + BASE_H + 1);
+    for h in 0..s(3) {
+        for dz in -px..=px {
+            for dx in -px..=px {
+                if dx.abs() != px && dz.abs() != px {
+                    continue;
+                }
+                let corner = dx.abs() == px && dz.abs() == px;
+                if corner || dx.rem_euclid(BAY) == 0 || dz.rem_euclid(BAY) == 0 {
+                    world.set(cx + dx, floor + h, cz + dz, Block::RedPillar);
+                }
+            }
+        }
+    }
+    let beam = floor + s(3);
+    for dz in -px..=px {
+        for dx in -px..=px {
+            if dx.abs() == px || dz.abs() == px {
+                world.set(cx + dx, beam, cz + dz, Block::Dancheong);
+            }
+        }
+    }
+    let eave = lay_brackets(world, cx, cz, px, px, beam + 1);
+    lay_roof(world, cx, cz, px, px, eave, EAVES, PALACE_STEP, true);
 }
 
 // --- 흥례문 권역 (the outer approach) ---------------------------------------
@@ -1947,6 +2026,73 @@ mod checks {
                     "{name}: no way through {d} from the centre of the passage"
                 );
             }
+        }
+    }
+
+    /// With the four gates sealed, the wall holds all the way round.
+    ///
+    /// 동십자각's stair first ran north straight off the corner, along the wall
+    /// line. Descending a course a block, it cut a notch clean through the 담장
+    /// for its whole length, and because it bottoms out one block up, that notch
+    /// was a step onto the wall from *outside* the palace and a walkway down
+    /// into it. Nothing looked wrong: the tower was correct, the wall either
+    /// side of it was correct, and every other test passed.
+    #[test]
+    fn the_wall_holds_between_its_gates() {
+        let w = generate(1);
+        let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+
+        // Plug each gate mouth, generously, so what is left is only the wall.
+        let gates = [
+            (cx, cz + PALACE_SOUTH),
+            (cx - PALACE_X, cz + YEONGCHU_Z),
+            (cx + PALACE_X, cz + GEONCHUN_Z),
+            (cx, cz - PALACE_NORTH),
+        ];
+        let sealed = |x: i32, z: i32| {
+            gates
+                .iter()
+                .any(|&(gx, gz)| (x - gx).abs() <= s(9) && (z - gz).abs() <= s(9))
+        };
+        let standable = |x: i32, z: i32| {
+            [GROUND + 1, GROUND].into_iter().any(|y| {
+                w.get(x, y, z).blocks_movement()
+                    && !w.get(x, y + 1, z).blocks_movement()
+                    && !w.get(x, y + 2, z).blocks_movement()
+            })
+        };
+
+        // Start well outside the south-east corner, where the tower is.
+        let start = (cx + PALACE_X + s(8), cz + PALACE_SOUTH + s(8));
+        let mut seen = std::collections::HashSet::new();
+        let mut queue = std::collections::VecDeque::new();
+        seen.insert(start);
+        queue.push_back(start);
+        while let Some((x, z)) = queue.pop_front() {
+            for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let n = (x + dx, z + dz);
+                // Keep the search in a box around the precinct.
+                if (n.0 - cx).abs() > PALACE_X + s(14)
+                    || n.1 < cz - PALACE_NORTH - s(14)
+                    || n.1 > cz + PALACE_SOUTH + s(14)
+                {
+                    continue;
+                }
+                if !sealed(n.0, n.1) && standable(n.0, n.1) && seen.insert(n) {
+                    queue.push_back(n);
+                }
+            }
+        }
+
+        for (name, x, z) in [
+            ("the outer court", cx, cz + PALACE_SOUTH - s(10)),
+            ("the west flank", cx - BYPASS_X, cz + COURT_OFFSET_Z),
+            ("the rear garden", cx, cz + HYANGWON_Z + s(9)),
+        ] {
+            assert!(
+                !seen.contains(&(x, z)),
+                "got into {name} at ({x},{z}) without using a gate — the wall is breached"
+            );
         }
     }
 
