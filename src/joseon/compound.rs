@@ -235,3 +235,76 @@ pub(super) fn place_hamhwadang(world: &mut World, cx: i32, cz: i32, gy: i32) {
     place_residence(world, cx - HAMHWA_SPREAD, cz, gy, HALL_X, HALL_Z, true);
     place_residence(world, cx + HAMHWA_SPREAD, cz, gy, HALL_X, HALL_Z, true);
 }
+
+/// 집옥재 — the library, east of 건청궁.
+///
+/// The one building in 경복궁 that is not Korean. It was put up in the Qing
+/// manner: two storeys with brick gable ends carried right up to the roof,
+/// where a hanok would have a timber frame with panels between the posts and an
+/// open gable above. That difference is the whole reason it is worth building
+/// separately rather than reaching for `place_residence` again.
+///
+/// So the ends are 흙담 brick to full height, the long faces are plastered
+/// between red posts, and there are no 창호 at all — this was a place books
+/// were kept, not a hall anyone received in.
+pub(super) fn place_jipokjae(world: &mut World, cx: i32, cz: i32, gy: i32) {
+    const BX: i32 = s(3);
+    const BZ: i32 = s(4);
+    const STOREY_H: i32 = s(4);
+
+    // 기단.
+    for dz in -(BZ + s(2))..=(BZ + s(2)) {
+        for dx in -(BX + s(2))..=(BX + s(2)) {
+            world.set(cx + dx, gy + 1, cz + dz, Block::Granite);
+            for h in 2..=(STOREY_H * 2 + s(8)) {
+                world.set(cx + dx, gy + h, cz + dz, Block::Air);
+            }
+        }
+    }
+
+    // Two storeys of the same plan, the upper drawn in by a block so the
+    // building steps as it rises.
+    let mut floor = gy + 2;
+    for storey in 0..2 {
+        let (bx, bz) = (BX - storey, BZ - storey);
+        for h in 0..STOREY_H {
+            for dz in -bz..=bz {
+                for dx in -bx..=bx {
+                    if dx.abs() != bx && dz.abs() != bz {
+                        continue;
+                    }
+                    // The gable ends are brick to the eaves; the long faces are
+                    // plaster panels between posts.
+                    let block = if dx.abs() == bx {
+                        Block::ClayWall
+                    } else if dx.rem_euclid(BAY) == 0 {
+                        Block::RedPillar
+                    } else {
+                        Block::Plaster
+                    };
+                    world.set(cx + dx, floor + h, cz + dz, block);
+                }
+            }
+        }
+        // A doorway through the lower front only.
+        if storey == 0 {
+            for h in 0..DOOR_H {
+                for dx in -1..=1 {
+                    world.set(cx + dx, floor + h, cz + bz, Block::Air);
+                }
+            }
+        }
+        floor += STOREY_H;
+    }
+
+    let beam = floor;
+    for dz in -(BZ - 1)..=(BZ - 1) {
+        for dx in -(BX - 1)..=(BX - 1) {
+            if dx.abs() == BX - 1 || dz.abs() == BZ - 1 {
+                world.set(cx + dx, beam, cz + dz, Block::Dancheong);
+            }
+        }
+    }
+    let eave = lay_brackets(world, cx, cz, BX - 1, BZ - 1, beam + 1);
+    lay_roof(world, cx, cz, BX - 1, BZ - 1, eave, EAVES, PALACE_STEP, true);
+}

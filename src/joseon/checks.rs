@@ -528,3 +528,29 @@ fn count_in(w: &World, cx: i32, cz: i32, rx: i32, rz: i32, block: Block) -> u32 
     }
     n
 }
+
+/// 집옥재 is the one building here that is not Korean, and the thing that says
+/// so is its brick gable ends carried to the roof. Reach for `place_residence`
+/// next time this corner is touched and it becomes another hanok — correct in
+/// every other respect and wrong in the only one that matters.
+#[test]
+fn the_library_has_brick_gables() {
+    let w = generate(1);
+    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (ox, oz) = (cx + JIPOK_X, cz + JIPOK_Z);
+    let mut brick = 0;
+    let mut paper = 0;
+    for dz in -s(6)..=s(6) {
+        for dx in -s(5)..=s(5) {
+            for y in GROUND..GROUND + 16 {
+                match w.get(ox + dx, y, oz + dz) {
+                    Block::ClayWall => brick += 1,
+                    Block::Paper => paper += 1,
+                    _ => {}
+                }
+            }
+        }
+    }
+    assert!(brick > 40, "집옥재 has no brick gables ({brick})");
+    assert_eq!(paper, 0, "집옥재 grew 창호; it is a library, not a hall");
+}

@@ -9,10 +9,10 @@
 //!
 //! ```text
 //!                        신무문   (north gate)
-//!                        향원정   (hexagonal pavilion, on its island)   건청궁
+//!                        향원정   (hexagonal pavilion, on its island)   건청궁 집옥재
 //!                        아미산   (terraced garden)
-//!                        교태전   ┐ 무량각 — the king's and
-//!    영추문   수정전     강녕전   ┘ queen's halls have no ridge     자경전
+//!              함원전   교태전   흠경각 ┐ 무량각 — the king's and
+//!    영추문   수정전     강녕전          ┘ queen's halls have no ridge  자경전
 //!                                                                  건춘문
 //!                        사정전   (the council hall)               동궁
 //!                        근정전   (throne hall, on its 월대)
@@ -108,6 +108,19 @@ const GYOTAE_Z: i32 = -s(66); // 교태전, the queen's
 /// 향원정, in the rear garden well beyond the living quarters.
 const HYANGWON_Z: i32 = -s(84);
 
+/// 함원전 and 흠경각, in the strips either side of 교태전.
+///
+/// These are what widening the precinct was for. The strip is 15 blocks between
+/// the queen's platform and the flanking route, and a hall of this size lands
+/// two clear of each — and two clear of 아미산's lowest terrace behind.
+///
+/// Small, and correctly so. Neither was a hall of state: 흠경각 housed the
+/// astronomical clock and 함원전 was a private chapel, so at 침전 scale they
+/// would tower over the queen's own quarters standing between them.
+const HAMWON_X: i32 = -s(14);
+const HEUMGYEONG_X: i32 = s(14);
+const FLANKING_HALL_Z: i32 = -s(65);
+
 /// 건청궁, in the quarter north-east of the pond. Carrying the north wall out
 /// to make room for 신무문 left this whole corner empty, and it is where the
 /// real 건청궁 stands: off the axis, behind the garden, away from the halls of
@@ -118,6 +131,10 @@ const HYANGWON_Z: i32 = -s(84);
 /// this flank and the garden path to 향원정 runs north at s(16) east of the
 /// axis, so this compound sits between the two of them. The precinct has since
 /// been widened, which is what opened the ground east of it.
+/// 집옥재, in the ground east of 건청궁 that widening the precinct opened up.
+const JIPOK_X: i32 = s(42);
+const JIPOK_Z: i32 = -s(81);
+
 const GEONCHEONG_X: i32 = s(27);
 const GEONCHEONG_Z: i32 = -s(81);
 const GEONCHEONG_RX: i32 = s(9);
@@ -236,8 +253,13 @@ fn place_palace(world: &mut World, gy: i32) {
     place_hyangwonjeong(world, cx, cz + HYANGWON_Z, gy);
     // 건청궁, in the corner beyond it.
     place_geoncheongung(world, cx + GEONCHEONG_X, cz + GEONCHEONG_Z, gy);
+    // 집옥재, the library, in the corner beyond 건청궁.
+    place_jipokjae(world, cx + JIPOK_X, cz + JIPOK_Z, gy);
     // 태원전, in the matching corner to the west.
     place_taewonjeon(world, cx + TAEWON_X, cz + TAEWON_Z, gy);
+    // 함원전 and 흠경각, either side of 교태전 in its own yard.
+    place_residence(world, cx + HAMWON_X, cz + FLANKING_HALL_Z, gy, s(2), s(2), true);
+    place_residence(world, cx + HEUMGYEONG_X, cz + FLANKING_HALL_Z, gy, s(2), s(2), true);
     // 함화당 and 집경당, in the west-central ground.
     place_hamhwadang(world, cx + HAMHWA_X, cz + HAMHWA_Z, gy);
     // 소주방, in the service strip behind 강녕전.
