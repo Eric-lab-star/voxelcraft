@@ -220,6 +220,10 @@ fn place_palace(world: &mut World, gy: i32) {
     place_residence(world, cx + DONGGUNG_X, cz + DONGGUNG_Z, gy, s(5), s(4), true);
     // 향원정 — the hexagonal pavilion in the rear garden, at the far north.
     place_hyangwonjeong(world, cx, cz + HYANGWON_Z, gy);
+
+    // Last, so every gateway it has to meet is already standing. Paths are laid
+    // at ground level only, so this cannot disturb any of them.
+    lay_paths(world, cx, cz, gy);
 }
 
 /// Height of every 담장 in the palace, from footing to coping. Shared by the
@@ -648,13 +652,21 @@ fn lay_cloister(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // points at the court, so each run knows which of its two faces is the open
     // colonnade and which is the solid outer wall.
     for side in [-1, 1] {
-        cloister_run(world, cx, cz + side * COURT_Z, COURT_X, true, -side, gy);
-        cloister_run(world, cx + side * COURT_X, cz, COURT_Z, false, -side, gy);
+        // 사정문 — the north run is the only one that opens. The axis is meant
+        // to run *through* the court and out the far side to 사정전; sealed, it
+        // forced you back down the length of the yard and around the outside of
+        // the whole cloister, which is the one thing the layout is arranged to
+        // stop you doing. The south run stays closed here because 근정문 is
+        // built over it afterwards and cuts its own opening.
+        let gated = side == -1;
+        cloister_run(world, cx, cz + side * COURT_Z, COURT_X, true, -side, gy, gated);
+        cloister_run(world, cx + side * COURT_X, cz, COURT_Z, false, -side, gy, false);
     }
 }
 
 /// One straight run of cloister: a raised walkway, solid on the outside, open
 /// colonnade on the court side, under a tiled roof.
+#[allow(clippy::too_many_arguments)]
 fn cloister_run(
     world: &mut World,
     cx: i32,
@@ -663,6 +675,7 @@ fn cloister_run(
     along_x: bool,
     inward: i32,
     gy: i32,
+    gated: bool,
 ) {
     let at = |t: i32, w: i32| {
         if along_x {
@@ -690,15 +703,22 @@ fn cloister_run(
         // face is left open, which is what makes it a colonnade and not a
         // corridor you cannot see out of.
         let post = t.rem_euclid(BAY) == 0;
+        // The gateway through the outer face. Its jambs stay — they are what
+        // makes it read as a doorway rather than as a hole in the wall.
+        let doorway = gated && t.abs() < s(2);
         for h in 2..=(CLOISTER_H + 1) {
             let (ox, oz) = at(t, -inward * HALF_W);
-            world.set(
-                ox,
-                gy + h,
-                oz,
-                if post { Block::RedPillar } else { Block::Plaster },
-            );
-            if post {
+            if doorway {
+                world.set(ox, gy + h, oz, Block::Air);
+            } else {
+                world.set(
+                    ox,
+                    gy + h,
+                    oz,
+                    if post { Block::RedPillar } else { Block::Plaster },
+                );
+            }
+            if post && !doorway {
                 let (ix, iz) = at(t, inward * HALF_W);
                 world.set(ix, gy + h, iz, Block::RedPillar);
             }
@@ -906,6 +926,97 @@ fn lay_courtyard(world: &mut World, cx: i32, cz: i32, gy: i32) {
             }
         }
     }
+}
+
+// --- 어도 (the paths between the halls) -------------------------------------
+
+/// Half-width of the paths through the residential yards. The ceremonial 삼도
+/// down the south court is wider; these are working routes between one hall and
+/// the next.
+const PATH_W: i32 = s(1);
+
+/// Pave a straight run at ground level, from `(x0,z0)` to `(x1,z1)`. One of the
+/// two axes must be constant — palace paths turn square corners, they do not
+/// wander diagonally.
+///
+/// Everything is written at `gy` and nothing above it, which is what makes this
+/// safe to run after the buildings: walls foot at `gy + 1` and platforms at
+/// `gy + 1`, so a path can only ever replace the ground *under* a structure,
+/// never cut through one. Where it runs beneath a wall it is simply invisible;
+/// where it passes a gateway it shows through, which is the whole point.
+fn pave(world: &mut World, gy: i32, x0: i32, z0: i32, x1: i32, z1: i32, block: Block) {
+    debug_assert!(x0 == x1 || z0 == z1, "paths run square, not diagonally");
+    for x in x0.min(x1)..=x0.max(x1) {
+        for z in z0.min(z1)..=z0.max(z1) {
+            // Widen across whichever axis the run is *not* travelling along.
+            let (wx, wz) = if x0 == x1 { (PATH_W, 0) } else { (0, PATH_W) };
+            for ox in -wx..=wx {
+                for oz in -wz..=wz {
+                    world.set(x + ox, gy, z + oz, block);
+                }
+            }
+        }
+    }
+}
+
+/// Link the halls together.
+///
+/// The palace was a set of buildings standing on an open field: every gateway
+/// opened onto undifferentiated grass, so nothing told you where to go next and
+/// the axis the whole plan is built around was invisible on the ground. These
+/// are the routes the real palace uses, which is also how visitors are walked
+/// round it today.
+///
+/// Two grades, because the palace has two. The spine carries 어도 in dressed
+/// granite, continuing the 삼도 that already runs up from 광화문. The spurs off
+/// it to the side compounds are 흙길, beaten earth — they were service routes,
+/// not processional ones, and paving them the same would flatten the hierarchy
+/// the layout depends on.
+fn lay_paths(world: &mut World, cx: i32, cz: i32, gy: i32) {
+    let court_north = cz + COURT_OFFSET_Z - COURT_Z;
+
+    // The spine: out through 사정문 and north past each hall in turn, threading
+    // the gateway in every cross wall on the way. It stops in front of 교태전,
+    // the last hall on the axis.
+    let spine_end = cz + GYOTAE_Z + s(4) + 2;
+    pave(world, gy, cx, court_north, cx, spine_end, Block::Granite);
+
+    // On to the rear garden. 교태전 stands on the axis and 아미산 is terraced
+    // across it directly behind, so the way through turns off in front of the
+    // hall, runs up its east flank clear of both, and comes back to the axis at
+    // the pond — which is how you walk it in the real palace.
+    let round_x = cx + s(16);
+    let pond_z = cz + HYANGWON_Z + s(9);
+    pave(world, gy, cx, spine_end, round_x, spine_end, Block::Road);
+    pave(world, gy, round_x, spine_end, round_x, pond_z, Block::Road);
+    pave(world, gy, round_x, pond_z, cx, pond_z, Block::Road);
+
+    // Spurs to the compounds either side. Every compound gateway is in its
+    // *south* face, so each spur runs out along a clear latitude below the
+    // compound and then turns north into the opening. Running straight out at
+    // the gateway's own latitude looked shorter and was wrong: the path arrived
+    // broadside against the compound's south wall and spent its last ten blocks
+    // buried under it, so on the ground it simply stopped at a wall.
+    for (gate_x, gate_z) in [
+        (cx + JAGYEONG_X, cz + JAGYEONG_Z + s(11)), // 자경전
+        (cx + DONGGUNG_X, cz + DONGGUNG_Z + s(8)),  // 동궁
+        (cx + SUJEONG_X, cz + SUJEONG_Z + s(8)),    // 수정전
+    ] {
+        let approach = gate_z + s(4);
+        pave(world, gy, cx, approach, gate_x, approach, Block::Road);
+        pave(world, gy, gate_x, approach, gate_x, gate_z, Block::Road);
+    }
+
+    // 경회루. Its pond fills the strip between the court's west cloister and
+    // the precinct wall, and that cloister is unbroken down its whole length,
+    // so there is no way west out of the court at this latitude at all — a spur
+    // straight off the spine just ran under the cloister and died against it
+    // from both sides. The approach comes round from the south courtyard and up
+    // the pond's dressed east bank instead, which is how you walk it today.
+    let bank_x = cx - s(30) + s(7);
+    let below_pond = cz - s(8) + s(12) + 2;
+    pave(world, gy, cx, below_pond, bank_x, below_pond, Block::Road);
+    pave(world, gy, bank_x, below_pond, bank_x, cz - s(8), Block::Road);
 }
 
 /// The 담장 around the precinct: granite footing, plaster body, tiled coping —
@@ -1280,6 +1391,87 @@ mod checks {
                 w.get(cx + out + 1, y, hz),
                 Block::Air,
                 "tier {tier} is a solid collar rather than a step"
+            );
+        }
+    }
+
+    /// You must be able to walk from 광화문 to every hall *on a path*.
+    ///
+    /// Reachability alone proves nothing here: the precinct is an open field, so
+    /// before any of this existed you could already get anywhere by striking out
+    /// across the grass and going round the back of the cloister. A flood fill
+    /// over walkable ground reached all eleven landmarks and reported 144,686
+    /// cells — and the palace still had no circulation to speak of. So this
+    /// walks the *paved* surface only, which is the thing that actually tells a
+    /// visitor where to go.
+    #[test]
+    fn every_hall_is_on_the_path_network() {
+        let w = generate(1);
+        let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+
+        // The surface you would actually stand on, and what it is made of.
+        //
+        // Paving alone is not enough to call a route connected: paths are laid
+        // at ground level and walls foot one block above, so a path running
+        // under a wall is continuous underfoot and completely impassable. An
+        // earlier version of this test checked only the paving and happily
+        // passed a spur to 경회루 that tunnelled beneath the west cloister.
+        //
+        // Both levels have to be considered, because the 삼도's centre lane is
+        // deliberately raised a block — walking the axis means walking on top
+        // of it, not beside it.
+        let surface = |x: i32, z: i32| {
+            [GROUND + 1, GROUND].into_iter().find_map(|y| {
+                let b = w.get(x, y, z);
+                (b.blocks_movement()
+                    && !w.get(x, y + 1, z).blocks_movement()
+                    && !w.get(x, y + 2, z).blocks_movement())
+                .then_some((y, b))
+            })
+        };
+        // 취향교 counts: a timber bridge is as much a way to 향원정 as a paved
+        // one, and it is the only way onto the island.
+        let open = |x: i32, z: i32| {
+            surface(x, z).is_some_and(|(_, b)| {
+                matches!(
+                    b,
+                    Block::Granite | Block::Road | Block::Stone | Block::Wood
+                )
+            })
+        };
+
+        // Flood the paving, starting under 광화문.
+        let start = (cx, cz + PALACE_SOUTH);
+        assert!(open(start.0, start.1), "광화문 itself is not walkable paving");
+        let mut seen = std::collections::HashSet::new();
+        let mut queue = std::collections::VecDeque::new();
+        seen.insert(start);
+        queue.push_back(start);
+        while let Some((x, z)) = queue.pop_front() {
+            for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let n = (x + dx, z + dz);
+                if open(n.0, n.1) && seen.insert(n) {
+                    queue.push_back(n);
+                }
+            }
+        }
+
+        for (name, x, z) in [
+            // The foot of the 월대 stairs — the terrace itself stands a block
+            // up, so the ground-level target is in front of it.
+            ("근정전", cx, cz + COURT_OFFSET_Z - s(2) + s(12) + 2),
+            ("사정전", cx, cz + SAJEONG_Z + s(4) + 2),
+            ("강녕전", cx, cz + GANGNYEONG_Z + s(4) + 2),
+            ("교태전", cx, cz + GYOTAE_Z + s(4) + 2),
+            ("향원정", cx, cz + HYANGWON_Z + s(9)),
+            ("자경전", cx + JAGYEONG_X, cz + JAGYEONG_Z + s(11)),
+            ("동궁", cx + DONGGUNG_X, cz + DONGGUNG_Z + s(8)),
+            ("수정전", cx + SUJEONG_X, cz + SUJEONG_Z + s(8)),
+            ("경회루", cx - s(30) + s(7), cz - s(8)),
+        ] {
+            assert!(
+                seen.contains(&(x, z)),
+                "{name} is not joined to the path network at ({x},{z})"
             );
         }
     }
