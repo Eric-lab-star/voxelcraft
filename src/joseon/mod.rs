@@ -64,10 +64,19 @@ pub fn generate(_seed: u32) -> World {
 
 // --- 경복궁 (the palace) ----------------------------------------------------
 
-/// Half-extents of the walled palace precinct. Wide enough to hold the throne
-/// hall's court on the central axis *and* 경회루 on its pond off to the west,
-/// the way Gyeongbokgung is actually laid out.
-const PALACE_X: i32 = s(38);
+/// Half-extents of the walled palace precinct.
+///
+/// Widened from 38 once the interior ran out of room. The precinct is laid out
+/// in bands either side of the axis — halls, then a strip for the small halls
+/// beside them, then the flanking route, the inner yard wall, a service strip,
+/// and the side compounds — and at the old width those bands were four and nine
+/// blocks across, too thin to stand anything in. Widening them all pushed this
+/// out with them.
+///
+/// It is more faithful as well as more usable. 경복궁 is about 500m by 700m,
+/// or 1:1.40; at 38 this precinct was 1:1.72, noticeably narrower than the real
+/// thing. 48 puts it at 1:1.35.
+const PALACE_X: i32 = s(48);
 
 /// How far the precinct runs south and north of its centre. Gyeongbokgung is far
 /// deeper than it is wide, and lopsided about its middle: the ceremonial gate and
@@ -84,7 +93,7 @@ const PALACE_NORTH: i32 = s(100);
 /// Half-extents of the 근정전 court — the cloistered inner yard the throne hall
 /// stands in. A throne hall alone in an open field reads as a big shed; the
 /// enclosure is what makes it the centre of a palace.
-const COURT_X: i32 = s(20);
+const COURT_X: i32 = s(25);
 const COURT_Z: i32 = s(15);
 
 /// How far north of the precinct centre that court sits, leaving a long
@@ -107,8 +116,8 @@ const HYANGWON_Z: i32 = -s(84);
 ///
 /// The corner is tighter than it looks. 자경전's yard reaches up to z -94 on
 /// this flank and the garden path to 향원정 runs north at s(16) east of the
-/// axis, so this compound has to sit between the two of them and clear of the
-/// precinct wall as well.
+/// axis, so this compound sits between the two of them. The precinct has since
+/// been widened, which is what opened the ground east of it.
 const GEONCHEONG_X: i32 = s(27);
 const GEONCHEONG_Z: i32 = -s(81);
 const GEONCHEONG_RX: i32 = s(9);
@@ -118,10 +127,9 @@ const GEONCHEONG_RZ: i32 = s(16);
 const JANGAN_Z: i32 = -s(8);
 const GONNYEONG_Z: i32 = s(8);
 
-/// 태원전, in the north-west quarter — the largest piece of empty ground left
-/// inside the walls, 37 blocks across between the west wall and the flanking
-/// path and 83 deep between the north wall and 수정전.
-const TAEWON_X: i32 = -s(26);
+/// 태원전, in the north-west quarter, between the west wall and the flanking
+/// path and running 83 deep from the north wall down to 수정전.
+const TAEWON_X: i32 = -s(34);
 const TAEWON_Z: i32 = -s(76);
 const TAEWON_RX: i32 = s(11);
 const TAEWON_RZ: i32 = s(14);
@@ -131,12 +139,9 @@ const TAEWON_HALL_Z: i32 = -s(6);
 
 /// 함화당 and 집경당, in the west-central ground between 태원전 and 수정전.
 ///
-/// This is the last piece of open ground inside the walls with room for a
-/// compound in it — 34 blocks by 26. The others the map still shows are past
-/// fitting: 집옥재's corner beside 건청궁 is nine blocks wide once the garden
-/// path is out of it, and the strips either side of 교태전 are eleven, which a
-/// yard wall and two sets of eaves would fill on their own.
-const HAMHWA_X: i32 = -s(26);
+/// Went in when this was the last open ground with room for a compound. The
+/// precinct has since been widened, so it is no longer the last.
+const HAMHWA_X: i32 = -s(34);
 const HAMHWA_Z: i32 = -s(53);
 const HAMHWA_RX: i32 = s(11);
 const HAMHWA_RZ: i32 = s(7);
@@ -148,18 +153,18 @@ const HAMHWA_RZ: i32 = s(7);
 /// read as one building with a seam down it.
 const HAMHWA_SPREAD: i32 = 8;
 
-/// The side compounds, in the strips between the inner yards and the precinct
-/// wall. Their half-width is 7, so a centre of 30 spans 23..37 — clear of both
-/// the court cloister's eaves at 22 and the precinct wall at 38.
-const JAGYEONG_X: i32 = s(30); // 자경전, the dowager queen's hall
+/// The side compounds, in the outermost band — beyond the inner yard wall at
+/// 34 and inside the precinct wall at 72. Their half-width is 10, so a centre
+/// of 58 spans 48..68, leaving thirteen blocks of service strip inside them and
+/// four to the wall outside.
+const JAGYEONG_X: i32 = s(39); // 자경전, the dowager queen's hall
 const JAGYEONG_Z: i32 = -s(52);
 
-const SUJEONG_X: i32 = -s(30); // 수정전, west of the axis
+const SUJEONG_X: i32 = -s(39); // 수정전, west of the axis
 const SUJEONG_Z: i32 = -s(36);
 
-const DONGGUNG_X: i32 = s(30); // 동궁, the crown prince's quarters
-/// 동궁's compound. The east flank is only 24 blocks of clear ground between
-/// the court's cloister and the precinct wall, so its two halls cannot stand
+const DONGGUNG_X: i32 = s(39); // 동궁, the crown prince's quarters
+/// 동궁's compound. Its band is 21 blocks across, so its two halls cannot stand
 /// side by side however the real ones are drawn — the yard runs deep instead
 /// and puts one behind the other.
 const DONGGUNG_RX: i32 = s(7);
@@ -219,7 +224,7 @@ fn place_palace(world: &mut World, gy: i32) {
 
     // 경회루 — the banquet pavilion standing on its pond, west of the axis, in
     // the strip between the court's cloister and the precinct wall.
-    place_gyeonghoeru(world, cx - s(30), cz - s(8), gy);
+    place_gyeonghoeru(world, cx + GYEONGHOE_X, cz + GYEONGHOE_Z, gy);
     // 자경전 — the dowager queen's hall, in the matching strip to the east.
     place_jagyeongjeon(world, cx + JAGYEONG_X, cz + JAGYEONG_Z, gy);
     // 수정전 and 동궁 fill the flanks either side of the inner yards, which were
@@ -256,7 +261,14 @@ const GEONCHUN_Z: i32 = -s(38);
 
 /// 소주방, in the strip east of 강녕전 — thirteen blocks of clear ground between
 /// the flanking path and 자경전's yard.
-const SOJU_X: i32 = s(19);
+/// 경회루, on its pond in the strip west of the court. Its position was
+/// repeated as a bare `s(30)` in three places — the placement, the path along
+/// its bank, and the test that has to reach it — which is exactly the kind of
+/// thing that comes apart the moment the precinct is re-proportioned.
+const GYEONGHOE_X: i32 = -s(36);
+const GYEONGHOE_Z: i32 = -s(8);
+
+const SOJU_X: i32 = s(27);
 
 const SOJU_Z: i32 = -s(52);
 

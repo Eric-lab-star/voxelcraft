@@ -267,7 +267,7 @@ fn every_hall_is_on_the_path_network() {
         ("자경전", cx + JAGYEONG_X, cz + JAGYEONG_Z + s(11)),
         ("동궁", cx + DONGGUNG_X, cz + DONGGUNG_Z + DONGGUNG_RZ),
         ("수정전", cx + SUJEONG_X, cz + SUJEONG_Z + s(8)),
-        ("경회루", cx - s(30) + s(7), cz - s(8)),
+        ("경회루", cx + GYEONGHOE_X + s(7), cz + GYEONGHOE_Z),
     ] {
         assert!(
             seen.contains(&(x, z)),

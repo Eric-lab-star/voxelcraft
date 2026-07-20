@@ -11,7 +11,7 @@ use crate::world::World;
 /// but it has no way back to the axis afterwards unless the wall it meets opens
 /// somewhere other than the middle. Hence a gate either side, clear of the
 /// widest platform (강녕전's, at 15) and well inside the yard's half-width of 30.
-pub(super) const BYPASS_X: i32 = s(13);
+pub(super) const BYPASS_X: i32 = s(20);
 
 // --- 회랑 (the cloister) ----------------------------------------------------
 
@@ -338,8 +338,8 @@ pub(super) fn lay_paths(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // straight off the spine just ran under the cloister and died against it
     // from both sides. The approach comes round from the south courtyard and up
     // the pond's dressed east bank instead, which is how you walk it today.
-    let bank_x = cx - s(30) + s(7);
-    let below_pond = cz - s(8) + s(12) + 2;
+    let bank_x = cx + GYEONGHOE_X + s(7);
+    let below_pond = cz + GYEONGHOE_Z + s(12) + 2;
     pave(world, gy, cx, below_pond, bank_x, below_pond, Block::Road);
     pave(
         world,
