@@ -9,7 +9,7 @@ use crate::world::{PLAY_MARGIN, WORLD_X, WORLD_Y, WORLD_Z};
 #[test]
 fn sleeping_halls_have_no_ridge() {
     let w = generate(1);
-    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (cx, cz) = super::palace_centre();
     let crown = |dz: i32| {
         let z = cz + dz;
         let y = (0..WORLD_Y)
@@ -35,7 +35,7 @@ fn sleeping_halls_have_no_ridge() {
 #[test]
 fn every_hall_is_standing() {
     let w = generate(1);
-    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (cx, cz) = super::palace_centre();
     for (name, x, z) in [
         ("사정전", cx, cz + SAJEONG_Z),
         ("강녕전", cx, cz + GANGNYEONG_Z),
@@ -66,7 +66,7 @@ fn every_hall_is_standing() {
 #[test]
 fn the_throne_hall_has_a_throne() {
     let w = generate(1);
-    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (cx, cz) = super::palace_centre();
     // Walk the same chain of offsets the builders use, rather than the
     // absolute numbers they happened to produce at the original scale:
     // the court, then the hall set back inside it, then the throne set
@@ -97,7 +97,7 @@ fn the_throne_hall_has_a_throne() {
 #[test]
 fn palace_is_solid_and_enterable() {
     let w = generate(1337);
-    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (cx, cz) = super::palace_centre();
 
     // The centre passage of 광화문 is open all the way through.
     for dz in -3..=3 {
@@ -160,7 +160,7 @@ fn nothing_is_planted() {
 #[test]
 fn the_eaves_are_carried_on_brackets() {
     let w = generate(1);
-    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (cx, cz) = super::palace_centre();
     let hz = cz + COURT_OFFSET_Z - s(2); // 근정전, on the axis
     let bx = s(9); // its lower storey's half-width
     let beam = GROUND + 3 + s(4);
@@ -200,7 +200,7 @@ fn the_eaves_are_carried_on_brackets() {
 #[test]
 fn every_hall_is_on_the_path_network() {
     let w = generate(1);
-    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (cx, cz) = super::palace_centre();
 
     // The surface you would actually stand on, and what it is made of.
     //
@@ -289,7 +289,7 @@ fn every_hall_is_on_the_path_network() {
 #[test]
 fn the_halls_can_be_passed_without_crossing_their_terraces() {
     let w = generate(1);
-    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (cx, cz) = super::palace_centre();
 
     // The platforms, as laid by `place_residence`: half-extents plus apron.
     let on_terrace = |x: i32, z: i32| {
@@ -341,7 +341,7 @@ fn the_halls_can_be_passed_without_crossing_their_terraces() {
 #[test]
 fn every_gate_opens_through_the_wall() {
     let w = generate(1);
-    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (cx, cz) = super::palace_centre();
     for (name, gx, gz, along_x) in [
         ("광화문", cx, cz + PALACE_SOUTH, true),
         ("영추문", cx - PALACE_X, cz + YEONGCHU_Z, false),
@@ -381,7 +381,7 @@ fn every_gate_opens_through_the_wall() {
 #[test]
 fn the_wall_holds_between_its_gates() {
     let w = generate(1);
-    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (cx, cz) = super::palace_centre();
 
     // Plug each gate mouth, generously, so what is left is only the wall.
     let gates = [
@@ -447,7 +447,7 @@ fn the_wall_holds_between_its_gates() {
 #[test]
 fn the_kitchens_are_ranges_not_halls() {
     let w = generate(1);
-    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (cx, cz) = super::palace_centre();
     let (ox, oz) = (cx + SOJU_X, cz + SOJU_Z);
 
     let mut plaster = 0;
@@ -482,7 +482,7 @@ fn the_kitchens_are_ranges_not_halls() {
 #[test]
 fn the_palace_fits_in_the_world() {
     let w = generate(1337);
-    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (cx, cz) = super::palace_centre();
 
     let mut highest = 0;
     for z in 0..WORLD_Z {
@@ -536,7 +536,7 @@ fn count_in(w: &World, cx: i32, cz: i32, rx: i32, rz: i32, block: Block) -> u32 
 #[test]
 fn the_library_has_brick_gables() {
     let w = generate(1);
-    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (cx, cz) = super::palace_centre();
     let (ox, oz) = (cx + JIPOK_X, cz + JIPOK_Z);
     let mut brick = 0;
     let mut paper = 0;

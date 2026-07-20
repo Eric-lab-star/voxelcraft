@@ -1,26 +1,33 @@
 use crate::block::Block;
 use crate::world::World;
 
-/// Scale every dimension in this map by 3/2.
+/// Scale a *building* — a hall's half-extents, a wall's height, an eave's
+/// reach.
 ///
-/// The palace was first laid out at a scale where 근정전's body was 19 blocks
-/// across. That is close to the real hall's 30m, but it left the *details* with
-/// nowhere to go: a 공포 bracket set, the sweep of a 처마, the frame around a
-/// 창호 panel are all sub-block at that size, so each collapsed to a single
-/// block or vanished. Half again as big is the smallest step that gives them
-/// two or three blocks to work in.
-///
-/// Dimensions are still written at the original scale and passed through here,
-/// rather than being restated as scaled literals, so the relationships the
-/// layout depends on stay legible — 자경전's half-width of 7 against the
-/// cloister at 22 and the wall at 38 — and one edit rescales the whole map.
+/// Kept separate from `d`, which scales the distances between things, because
+/// the two were badly out of step. Measured against the real 경복궁 the
+/// buildings here stood at 0.7 to 0.9 of full size while the gaps between them
+/// were at 0.23 to 0.30 — nearly full-size halls packed three to four times too
+/// close. That is what made the palace feel cramped, and no single scale factor
+/// could fix it, because the buildings were very nearly right already.
 ///
 /// Deliberately *not* applied to: `PALACE_STEP`, which is a ratio rather than a
 /// length, so the roofs keep their 1:2 pitch and simply grow taller with the
 /// halls they cover; and the 월대 terrace courses, which are one block each and
-/// have no half-block to grow by.
+/// have no fraction to grow by.
 pub(super) const fn s(n: i32) -> i32 {
-    n * 3 / 2
+    n * 2
+}
+
+/// Scale a *distance* — where a building stands, how wide a yard is, how far
+/// the wall runs.
+///
+/// Larger than `s` on purpose. Buildings that are close to their real size want
+/// the ground between them close to its real size too, and at the old common
+/// factor the approach from 광화문 to 흥례문 came out eight blocks where the
+/// real one is sixty. This puts it at twenty-five.
+pub(super) const fn d(n: i32) -> i32 {
+    n * 7 / 2
 }
 
 // --- 지붕 (the shared roof builder) ----------------------------------------

@@ -12,19 +12,24 @@ use noise::{NoiseFn, Perlin};
 /// Width/depth of a mesh chunk in blocks.
 pub const CHUNK_SIZE: i32 = 16;
 
-/// World size in blocks. 경복궁's precinct is 114 by 196 at roughly a block to
-/// the metre, and it is the ground *around* it that has driven this: 256 left
-/// the approach from 광화문 badly foreshortened, and 384 left only ten blocks
-/// between the palace's north wall and the edge of the walkable area — the one
-/// direction that matters, since 북악산 stands immediately behind the palace
-/// and the whole plan is arranged against it. 512 puts 74 blocks there.
+/// World size in blocks.
 ///
-/// Costs, measured on the 조선 map in release: worldgen 121ms and meshing every
-/// column 718ms, so about eight-tenths of a second of startup behind the title
-/// screen, against 473ms at 384. A save slot goes from 18MB to 32MB, the format
-/// still being one raw byte per block.
-pub const WORLD_X: i32 = 512;
-pub const WORLD_Z: i32 = 512;
+/// Driven by the palace and by the ground around it. 경복궁's precinct is now
+/// 336 by 455, and the two directions that matter outside it are north, where
+/// 북악산 stands immediately behind the palace, and south, where 육조거리 runs
+/// away from 광화문. 768 leaves 98 blocks of walkable ground to the north and
+/// 151 to the south.
+///
+/// Costs, measured on the 조선 map in release: worldgen 351ms and meshing all
+/// 2304 columns 1.61s, so about two seconds of startup — behind the title
+/// screen, which is where the world gets built anyway. Memory is 151MB
+/// resident, two bytes a cell.
+///
+/// A save slot is 72MB, which is the number to watch. The format is still one
+/// raw byte per block and these worlds are almost entirely air and flat ground,
+/// so run-length encoding would take nearly all of that back.
+pub const WORLD_X: i32 = 768;
+pub const WORLD_Z: i32 = 768;
 /// Vertical extent. At 64 the palace had 31 blocks of headroom above
 /// `FLAT_LEVEL` — 근정전 already used 18 of them, which left no room to build
 /// its halls at a size where 공포 brackets and a swept 처마 are more than one

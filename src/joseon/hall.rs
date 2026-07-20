@@ -38,7 +38,7 @@ pub(super) fn place_terrace_rails(world: &mut World, cx: i32, cz: i32, gy: i32) 
 
 /// Half-width of the yards behind the throne hall. Kept clear of the strip along
 /// the east wall, where 자경전 stands.
-pub(super) const INNER_X: i32 = s(23);
+pub(super) const INNER_X: i32 = d(23);
 
 /// Lay out the sequence of halls north of the throne hall: 사정전 where the king
 /// held council, then 강녕전 and 교태전 where he and the queen slept, each behind

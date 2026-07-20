@@ -11,7 +11,7 @@ use crate::world::World;
 /// but it has no way back to the axis afterwards unless the wall it meets opens
 /// somewhere other than the middle. Hence a gate either side, clear of the
 /// widest platform (강녕전's, at 15) and well inside the yard's half-width of 30.
-pub(super) const BYPASS_X: i32 = s(20);
+pub(super) const BYPASS_X: i32 = d(20);
 
 // --- 회랑 (the cloister) ----------------------------------------------------
 

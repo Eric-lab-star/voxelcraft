@@ -68,7 +68,7 @@ fn table() -> Vec<(i32, i32, &'static str)> {
 
 /// Every board in world coordinates, paired with its name.
 pub(crate) fn signposts() -> Vec<(IVec3, &'static str)> {
-    let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+    let (cx, cz) = palace_centre();
     table()
         .into_iter()
         .map(|(dx, dz, name)| (IVec3::new(cx + dx, GROUND + 2, cz + dz), name))
