@@ -12,9 +12,11 @@ use noise::{NoiseFn, Perlin};
 /// Width/depth of a mesh chunk in blocks.
 pub const CHUNK_SIZE: i32 = 16;
 
-/// World size in blocks.
-pub const WORLD_X: i32 = 256;
-pub const WORLD_Z: i32 = 256;
+/// World size in blocks. 경복궁's precinct is 76 by 124 blocks at roughly one
+/// block to the metre; 256 square left it filling a third of the map with the
+/// approach from 광화문 badly foreshortened. 384 gives the axis room to run.
+pub const WORLD_X: i32 = 384;
+pub const WORLD_Z: i32 = 384;
 /// Vertical extent. At 64 the palace had 31 blocks of headroom above
 /// `FLAT_LEVEL` — 근정전 already used 18 of them, which left no room to build
 /// its halls at a size where 공포 brackets and a swept 처마 are more than one
