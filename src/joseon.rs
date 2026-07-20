@@ -283,6 +283,8 @@ fn place_palace(world: &mut World, gy: i32) {
     place_geoncheongung(world, cx + GEONCHEONG_X, cz + GEONCHEONG_Z, gy);
     // 태원전, in the matching corner to the west.
     place_taewonjeon(world, cx + TAEWON_X, cz + TAEWON_Z, gy);
+    // 소주방, in the service strip behind 강녕전.
+    place_sojubang(world, cx + SOJU_X, cz + SOJU_Z, gy);
 
     // Last, so every gateway it has to meet is already standing. Paths are laid
     // at ground level only, so this cannot disturb any of them.
@@ -994,6 +996,98 @@ fn place_wall_gate(world: &mut World, cx: i32, cz: i32, gy: i32, along_x: bool) 
     lay_roof(world, cx, cz, bx, bz, eave, EAVES, PALACE_STEP, true);
 }
 
+// --- 소주방 (the kitchens) ---------------------------------------------------
+
+/// 소주방, in the strip east of 강녕전 — thirteen blocks of clear ground between
+/// the flanking path and 자경전's yard.
+const SOJU_X: i32 = s(19);
+const SOJU_Z: i32 = -s(52);
+
+/// 행각 — a long, low service range.
+///
+/// Everything built so far is a hall: a body on a platform under a bracketed
+/// roof, painted along its beam. A range is none of those things. It is three
+/// blocks deep and as long as the yard it edges, it stands low, and — the part
+/// that actually does the work of telling it apart — it carries **no 단청 and
+/// no 공포**. Paint and bracket sets marked a building as important, and the
+/// kitchens were not. A plain timber beam and a roof straight onto it.
+fn lay_range(world: &mut World, cx: i32, cz: i32, gy: i32, half_len: i32, along_x: bool) {
+    const DEPTH: i32 = 1;
+    const BODY_H: i32 = s(3);
+
+    let at = |t: i32, w: i32| {
+        if along_x {
+            (cx + t, cz + w)
+        } else {
+            (cx + w, cz + t)
+        }
+    };
+
+    for t in -half_len..=half_len {
+        for w in -DEPTH..=DEPTH {
+            let (x, z) = at(t, w);
+            world.set(x, gy + 1, z, Block::Granite);
+            for h in 2..=(BODY_H + s(4)) {
+                world.set(x, gy + h, z, Block::Air);
+            }
+        }
+    }
+
+    let floor = gy + 2;
+    for h in 0..BODY_H {
+        for t in -half_len..=half_len {
+            for w in -DEPTH..=DEPTH {
+                if t.abs() != half_len && w.abs() != DEPTH {
+                    continue;
+                }
+                let (x, z) = at(t, w);
+                let post = t.rem_euclid(BAY) == 0;
+                // Doors all down the length: these are stores and kitchens
+                // opening onto the yard, not a hall with one way in.
+                let door = w == -DEPTH && h < DOOR_H && t.rem_euclid(BAY) == s(1) + 1;
+                let block = if door {
+                    Block::Air
+                } else if post {
+                    Block::Wood
+                } else {
+                    Block::Plaster
+                };
+                world.set(x, floor + h, z, block);
+            }
+        }
+    }
+
+    // A plain beam, and the roof straight onto it — no brackets.
+    let beam = floor + BODY_H;
+    for t in -half_len..=half_len {
+        for w in -DEPTH..=DEPTH {
+            let (x, z) = at(t, w);
+            world.set(x, beam, z, Block::Wood);
+        }
+    }
+    let (bx, bz) = if along_x {
+        (half_len, DEPTH)
+    } else {
+        (DEPTH, half_len)
+    };
+    lay_roof(world, cx, cz, bx, bz, beam + 1, 1, 1, true);
+}
+
+/// 소주방 — the kitchens, in a service yard off 강녕전's.
+///
+/// Ranges down two sides only. The strip is thirteen blocks wide, and putting
+/// one down each side left a yard three blocks across — a corridor, not a court
+/// you could work in. Open towards 강녕전, which is where the food went.
+fn place_sojubang(world: &mut World, cx: i32, cz: i32, gy: i32) {
+    // The east range, running the depth of the yard.
+    lay_range(world, cx + s(2), cz, gy, s(5), false);
+    // The north range, closing the top of it. Its eaves reach two blocks
+    // further than its platform, and at the first placement they came down over
+    // the flanking path — the range stood on one of the path's three blocks and
+    // overhung another.
+    lay_range(world, cx - s(1), cz - s(4), gy, s(3), true);
+}
+
 // --- 동십자각 (the corner watchtower) ---------------------------------------
 
 /// 동십자각 — the watchtower on the south-east corner of the wall.
@@ -1434,6 +1528,19 @@ fn lay_paths(world: &mut World, cx: i32, cz: i32, gy: i32) {
         pave(world, gy, cx, approach, gate_x, approach, Block::Road);
         pave(world, gy, gate_x, approach, gate_x, gate_z, Block::Road);
     }
+
+    // 소주방's yard, off the east flank. Short: the kitchens sit right against
+    // the flanking route by design, being the one place in the palace that
+    // wanted traffic rather than seclusion.
+    pave(
+        world,
+        gy,
+        cx + BYPASS_X,
+        cz + SOJU_Z,
+        cx + SOJU_X - s(2),
+        cz + SOJU_Z,
+        Block::Road,
+    );
 
     // 태원전, off the north end of the west flank. Its gateway is in the south
     // face, so the spur runs out level with the flank's end and then turns up
@@ -2094,6 +2201,42 @@ mod checks {
                 "got into {name} at ({x},{z}) without using a gate — the wall is breached"
             );
         }
+    }
+
+    /// 소주방 is built as service ranges, not as another hall.
+    ///
+    /// The distinction is entirely in what it *lacks*. Paint and bracket sets
+    /// marked a building as important and the kitchens were not, so the moment
+    /// a range picks up a 단청 beam it stops reading as a service building and
+    /// the yard becomes one more set of quarters. That is an easy thing to lose
+    /// by reaching for the nearest existing builder.
+    #[test]
+    fn the_kitchens_are_ranges_not_halls() {
+        let w = generate(1);
+        let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+        let (ox, oz) = (cx + SOJU_X, cz + SOJU_Z);
+
+        let mut plaster = 0;
+        let mut timber = 0;
+        let mut painted = 0;
+        // Kept to 소주방's own footprint. Wider and it reaches 자경전, whose 공포
+        // project two blocks west of its body and are painted — the count then
+        // measures the neighbour and fails for the wrong reason.
+        for dz in -s(6)..=s(6) {
+            for dx in -s(4)..=s(4) {
+                for y in GROUND..GROUND + 12 {
+                    match w.get(ox + dx, y, oz + dz) {
+                        Block::Plaster => plaster += 1,
+                        Block::Wood => timber += 1,
+                        Block::Dancheong => painted += 1,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        assert!(plaster > 30, "the ranges have no walls ({plaster})");
+        assert!(timber > 20, "the ranges have no timber beam ({timber})");
+        assert_eq!(painted, 0, "a service range picked up a 단청 beam");
     }
 
     /// Nothing may touch the ceiling or the edge of the playable area.
