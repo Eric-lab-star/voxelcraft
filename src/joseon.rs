@@ -31,6 +31,28 @@ use crate::world::{World, FLAT_LEVEL, WORLD_X, WORLD_Z};
 /// worlds sit at the same height.
 const GROUND: i32 = FLAT_LEVEL;
 
+/// Scale every dimension in this map by 3/2.
+///
+/// The palace was first laid out at a scale where 근정전's body was 19 blocks
+/// across. That is close to the real hall's 30m, but it left the *details* with
+/// nowhere to go: a 공포 bracket set, the sweep of a 처마, the frame around a
+/// 창호 panel are all sub-block at that size, so each collapsed to a single
+/// block or vanished. Half again as big is the smallest step that gives them
+/// two or three blocks to work in.
+///
+/// Dimensions are still written at the original scale and passed through here,
+/// rather than being restated as scaled literals, so the relationships the
+/// layout depends on stay legible — 자경전's half-width of 7 against the
+/// cloister at 22 and the wall at 38 — and one edit rescales the whole map.
+///
+/// Deliberately *not* applied to: `PALACE_STEP`, which is a ratio rather than a
+/// length, so the roofs keep their 1:2 pitch and simply grow taller with the
+/// halls they cover; and the 월대 terrace courses, which are one block each and
+/// have no half-block to grow by.
+const fn s(n: i32) -> i32 {
+    n * 3 / 2
+}
+
 pub fn generate(_seed: u32) -> World {
     let mut world = World::empty();
     world.fill_flat(GROUND);
@@ -121,13 +143,13 @@ fn lay_roof(
 /// Half-extents of the walled palace precinct. Wide enough to hold the throne
 /// hall's court on the central axis *and* 경회루 on its pond off to the west,
 /// the way Gyeongbokgung is actually laid out.
-const PALACE_X: i32 = 38;
+const PALACE_X: i32 = s(38);
 /// How far the precinct runs south and north of its centre. Gyeongbokgung is far
 /// deeper than it is wide, and lopsided about its middle: the ceremonial gate and
 /// court sit at the south end, and the halls the royal family actually lived in
 /// run away north behind them.
-const PALACE_SOUTH: i32 = 30;
-const PALACE_NORTH: i32 = 94;
+const PALACE_SOUTH: i32 = s(30);
+const PALACE_NORTH: i32 = s(94);
 /// Palace roofs step in 2 per course. At `step` 1 a hall this wide would carry a
 /// roof taller than the building; 2 gives the shallow pitch of the real thing.
 const PALACE_STEP: i32 = 2;
@@ -135,32 +157,32 @@ const PALACE_STEP: i32 = 2;
 /// Half-extents of the 근정전 court — the cloistered inner yard the throne hall
 /// stands in. A throne hall alone in an open field reads as a big shed; the
 /// enclosure is what makes it the centre of a palace.
-const COURT_X: i32 = 20;
-const COURT_Z: i32 = 15;
+const COURT_X: i32 = s(20);
+const COURT_Z: i32 = s(15);
 /// How far north of the precinct centre that court sits, leaving a long
 /// approach between 광화문 and its gate.
-const COURT_OFFSET_Z: i32 = -13;
+const COURT_OFFSET_Z: i32 = -s(13);
 
 /// Centres of the halls behind the throne hall, north of the court, as offsets
 /// from the precinct centre. Each stands in its own walled yard.
-const SAJEONG_Z: i32 = -38; // 사정전, where the king held council
-const GANGNYEONG_Z: i32 = -52; // 강녕전, the king's own quarters
-const GYOTAE_Z: i32 = -66; // 교태전, the queen's
+const SAJEONG_Z: i32 = -s(38); // 사정전, where the king held council
+const GANGNYEONG_Z: i32 = -s(52); // 강녕전, the king's own quarters
+const GYOTAE_Z: i32 = -s(66); // 교태전, the queen's
 /// 향원정, in the rear garden well beyond the living quarters.
-const HYANGWON_Z: i32 = -84;
+const HYANGWON_Z: i32 = -s(84);
 /// The side compounds, in the strips between the inner yards and the precinct
 /// wall. Their half-width is 7, so a centre of 30 spans 23..37 — clear of both
 /// the court cloister's eaves at 22 and the precinct wall at 38.
-const JAGYEONG_X: i32 = 30; // 자경전, the dowager queen's hall
-const JAGYEONG_Z: i32 = -52;
-const SUJEONG_X: i32 = -30; // 수정전, west of the axis
-const SUJEONG_Z: i32 = -36;
-const DONGGUNG_X: i32 = 30; // 동궁, the crown prince's quarters
-const DONGGUNG_Z: i32 = -34;
+const JAGYEONG_X: i32 = s(30); // 자경전, the dowager queen's hall
+const JAGYEONG_Z: i32 = -s(52);
+const SUJEONG_X: i32 = -s(30); // 수정전, west of the axis
+const SUJEONG_Z: i32 = -s(36);
+const DONGGUNG_X: i32 = s(30); // 동궁, the crown prince's quarters
+const DONGGUNG_Z: i32 = -s(34);
 
 /// Half-extents of the throne hall's two 월대 terraces.
-const WOLDAE_OUTER: (i32, i32) = (15, 12);
-const WOLDAE_INNER: (i32, i32) = (12, 9);
+const WOLDAE_OUTER: (i32, i32) = (s(15), s(12));
+const WOLDAE_INNER: (i32, i32) = (s(12), s(9));
 
 /// Build 경복궁 at the centre of the map: a walled precinct entered from the
 /// south through 광화문, with 근정전 raised on its 월대 terraces at the north end
@@ -177,7 +199,7 @@ fn place_palace(world: &mut World, gy: i32) {
     // the gate rather than the other way about.
     let court_z = cz + COURT_OFFSET_Z;
     place_rank_stones(world, cx, court_z, gy);
-    place_throne_hall(world, cx, court_z - 2, gy);
+    place_throne_hall(world, cx, court_z - s(2), gy);
     lay_cloister(world, cx, court_z, gy);
     place_inner_gate(world, cx, court_z + COURT_Z, gy);
 
@@ -187,17 +209,50 @@ fn place_palace(world: &mut World, gy: i32) {
 
     // 경회루 — the banquet pavilion standing on its pond, west of the axis, in
     // the strip between the court's cloister and the precinct wall.
-    place_gyeonghoeru(world, cx - 30, cz - 8, gy);
+    place_gyeonghoeru(world, cx - s(30), cz - s(8), gy);
     // 자경전 — the dowager queen's hall, in the matching strip to the east.
     place_jagyeongjeon(world, cx + JAGYEONG_X, cz + JAGYEONG_Z, gy);
     // 수정전 and 동궁 fill the flanks either side of the inner yards, which were
     // bare ground between the cloister and the precinct wall.
-    compound_wall(world, cx + SUJEONG_X, cz + SUJEONG_Z, gy, 7, 8, false);
-    place_residence(world, cx + SUJEONG_X, cz + SUJEONG_Z, gy, 5, 4, true);
-    compound_wall(world, cx + DONGGUNG_X, cz + DONGGUNG_Z, gy, 7, 8, false);
-    place_residence(world, cx + DONGGUNG_X, cz + DONGGUNG_Z, gy, 5, 4, true);
+    compound_wall(world, cx + SUJEONG_X, cz + SUJEONG_Z, gy, s(7), s(8), false);
+    place_residence(world, cx + SUJEONG_X, cz + SUJEONG_Z, gy, s(5), s(4), true);
+    compound_wall(world, cx + DONGGUNG_X, cz + DONGGUNG_Z, gy, s(7), s(8), false);
+    place_residence(world, cx + DONGGUNG_X, cz + DONGGUNG_Z, gy, s(5), s(4), true);
     // 향원정 — the hexagonal pavilion in the rear garden, at the far north.
     place_hyangwonjeong(world, cx, cz + HYANGWON_Z, gy);
+}
+
+/// Height of every 담장 in the palace, from footing to coping. Shared by the
+/// precinct wall, the compound walls and the cross walls, which are the same
+/// wall in three places and used to state their four courses separately — so
+/// rescaling one of them silently left the others behind.
+const WALL_H: i32 = s(4);
+
+/// 주칸 — the spacing of the columns along a hall's front. Scaling this with
+/// everything else keeps the *number* of bays roughly constant and makes each
+/// one wider, which is what a bigger hall should look like; leaving it at 3
+/// would have crowded the same slim columns closer and closer together.
+const BAY: i32 = s(3);
+
+/// Clear height of a doorway. A person is under two blocks tall, so this is
+/// generous at any scale — it grows anyway so the openings stay in proportion
+/// to the walls they are cut through.
+const DOOR_H: i32 = s(3);
+
+/// 처마 — how far a hall's eaves project past its walls. Korean eaves overhang
+/// hard, and this is the number that carries it.
+const EAVES: i32 = s(2);
+
+/// Lay one course-by-course 담장 cell: granite footing, plaster body, tiled
+/// coping. `accent` replaces the lowest body course, which is where 자경전's
+/// 꽃담 carries its pattern.
+fn wall_column(world: &mut World, x: i32, gy: i32, z: i32, accent: Option<Block>) {
+    world.set(x, gy + 1, z, Block::Granite);
+    world.set(x, gy + 2, z, accent.unwrap_or(Block::Plaster));
+    for h in 3..WALL_H {
+        world.set(x, gy + h, z, Block::Plaster);
+    }
+    world.set(x, gy + WALL_H, z, Block::RoofTile);
 }
 
 /// A walled compound around a hall, with a gateway in its south face. Set
@@ -219,20 +274,8 @@ fn compound_wall(
             if dz == rz && dx.abs() <= 1 {
                 continue; // gateway
             }
-            world.set(cx + dx, gy + 1, cz + dz, Block::Granite);
-            let painted = flowered && dz == rz;
-            world.set(
-                cx + dx,
-                gy + 2,
-                cz + dz,
-                if painted {
-                    Block::Dancheong
-                } else {
-                    Block::Plaster
-                },
-            );
-            world.set(cx + dx, gy + 3, cz + dz, Block::Plaster);
-            world.set(cx + dx, gy + 4, cz + dz, Block::RoofTile);
+            let accent = (flowered && dz == rz).then_some(Block::Dancheong);
+            wall_column(world, cx + dx, gy, cz + dz, accent);
         }
     }
 }
@@ -256,16 +299,16 @@ fn place_jagyeongjeon(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // 꽃담 — the patterned wall this hall is known for. Only its south face gets
     // the painted course; it is the side you see, and decorating all four would
     // spend the effect.
-    compound_wall(world, cx, cz, gy, 7, 11, true);
-    place_residence(world, cx, cz, gy, 5, 4, true);
+    compound_wall(world, cx, cz, gy, s(7), s(11), true);
+    place_residence(world, cx, cz, gy, s(5), s(4), true);
 
     // 십장생 굴뚝 — the tall decorated chimney standing in the yard behind.
-    let chimney_z = cz - 9;
-    for h in 1..=6 {
+    let chimney_z = cz - s(9);
+    for h in 1..=s(6) {
         world.set(cx, gy + h, chimney_z, Block::ClayWall);
     }
-    world.set(cx, gy + 7, chimney_z, Block::Dancheong);
-    world.set(cx, gy + 8, chimney_z, Block::RoofTile);
+    world.set(cx, gy + s(6) + 1, chimney_z, Block::Dancheong);
+    world.set(cx, gy + s(6) + 2, chimney_z, Block::RoofTile);
 }
 
 // --- 향원정 (the pavilion in the rear garden) --------------------------------
@@ -310,10 +353,10 @@ fn lay_hex_roof(world: &mut World, cx: i32, cz: i32, r: i32, base_y: i32) {
 
 /// 향원정 — a hexagonal pavilion on an island in 향원지, reached by a bridge.
 fn place_hyangwonjeong(world: &mut World, cx: i32, cz: i32, gy: i32) {
-    const POND_R: i32 = 9;
-    const ISLAND_R: i32 = 4;
-    const HEX_R: i32 = 3;
-    const DEPTH: i32 = 2;
+    const POND_R: i32 = s(9);
+    const ISLAND_R: i32 = s(4);
+    const HEX_R: i32 = s(3);
+    const DEPTH: i32 = s(2);
 
     // The pond: a rounded basin with a dressed stone rim.
     for dz in -POND_R..=POND_R {
@@ -344,7 +387,7 @@ fn place_hyangwonjeong(world: &mut World, cx: i32, cz: i32, gy: i32) {
                 world.set(cx + dx, gy + d, cz + dz, Block::Granite);
             }
             world.set(cx + dx, gy + 1, cz + dz, Block::Grass);
-            for h in 2..=10 {
+            for h in 2..=s(10) {
                 world.set(cx + dx, gy + h, cz + dz, Block::Air);
             }
         }
@@ -361,7 +404,7 @@ fn place_hyangwonjeong(world: &mut World, cx: i32, cz: i32, gy: i32) {
         }
     }
     // A column wherever the hexagon's edge turns — its six corners.
-    for h in 1..=3 {
+    for h in 1..=s(3) {
         for dz in -HEX_R..=HEX_R {
             for dx in -HEX_R..=HEX_R {
                 let edge = in_hex(dx, dz, HEX_R) && !in_hex(dx, dz, HEX_R - 1);
@@ -371,7 +414,7 @@ fn place_hyangwonjeong(world: &mut World, cx: i32, cz: i32, gy: i32) {
             }
         }
     }
-    let beam = floor + 4;
+    let beam = floor + s(4);
     for dz in -HEX_R..=HEX_R {
         for dx in -HEX_R..=HEX_R {
             if in_hex(dx, dz, HEX_R) && !in_hex(dx, dz, HEX_R - 1) {
@@ -383,9 +426,9 @@ fn place_hyangwonjeong(world: &mut World, cx: i32, cz: i32, gy: i32) {
 
     // 취향교 — the bridge out to the island, running south to the bank.
     for dz in ISLAND_R..=POND_R {
-        for dx in -1..=1 {
+        for dx in -s(1)..=s(1) {
             world.set(cx + dx, gy + 1, cz + dz, Block::Wood);
-            for h in 2..=5 {
+            for h in 2..=s(5) {
                 world.set(cx + dx, gy + h, cz + dz, Block::Air);
             }
         }
@@ -404,7 +447,7 @@ fn place_terrace_rails(world: &mut World, cx: i32, cz: i32, gy: i32) {
                     continue;
                 }
                 // The stair up the south face.
-                if dz == rz && dx.abs() <= 3 {
+                if dz == rz && dx.abs() <= s(3) {
                     continue;
                 }
                 world.set(cx + dx, level, cz + dz, Block::Granite);
@@ -417,30 +460,30 @@ fn place_terrace_rails(world: &mut World, cx: i32, cz: i32, gy: i32) {
 
 /// Half-width of the yards behind the throne hall. Kept clear of the strip along
 /// the east wall, where 자경전 stands.
-const INNER_X: i32 = 20;
+const INNER_X: i32 = s(20);
 
 /// Lay out the sequence of halls north of the throne hall: 사정전 where the king
 /// held council, then 강녕전 and 교태전 where he and the queen slept, each behind
 /// its own cross wall.
 fn place_inner_quarters(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // 사정전 keeps a ridge; it is a hall of state like the ones to the south.
-    cross_wall(world, cx, cz + SAJEONG_Z + 12, gy);
-    place_residence(world, cx, cz + SAJEONG_Z, gy, 7, 4, true);
+    cross_wall(world, cx, cz + SAJEONG_Z + s(12), gy);
+    place_residence(world, cx, cz + SAJEONG_Z, gy, s(7), s(4), true);
 
     // 강녕전 and 교태전 are 무량각 — built deliberately *without* a ridge beam
     // over the rooms where the king and queen slept.
-    cross_wall(world, cx, cz + GANGNYEONG_Z + 8, gy);
-    place_residence(world, cx, cz + GANGNYEONG_Z, gy, 8, 4, false);
+    cross_wall(world, cx, cz + GANGNYEONG_Z + s(8), gy);
+    place_residence(world, cx, cz + GANGNYEONG_Z, gy, s(8), s(4), false);
 
-    cross_wall(world, cx, cz + GYOTAE_Z + 8, gy);
-    place_residence(world, cx, cz + GYOTAE_Z, gy, 7, 4, false);
+    cross_wall(world, cx, cz + GYOTAE_Z + s(8), gy);
+    place_residence(world, cx, cz + GYOTAE_Z, gy, s(7), s(4), false);
 
     // 아미산 — the terraced garden behind the queen's hall. Each step is both
     // further north and one course higher, so the ground climbs away from the
     // hall towards the back wall rather than towards it.
-    for step in 0..4 {
-        let dz = GYOTAE_Z - 4 - step;
-        for dx in -12..=12 {
+    for step in 0..s(4) {
+        let dz = GYOTAE_Z - s(4) - step;
+        for dx in -s(12)..=s(12) {
             for h in 0..=step {
                 world.set(cx + dx, gy + 1 + h, cz + dz, Block::Granite);
             }
@@ -454,13 +497,10 @@ fn cross_wall(world: &mut World, cx: i32, cz: i32, gy: i32) {
         if dx.abs() <= 1 {
             // The gateway — leave it open, but carry the coping across so the
             // wall reads as continuous.
-            world.set(cx + dx, gy + 4, cz, Block::RoofTile);
+            world.set(cx + dx, gy + WALL_H, cz, Block::RoofTile);
             continue;
         }
-        world.set(cx + dx, gy + 1, cz, Block::Granite);
-        world.set(cx + dx, gy + 2, cz, Block::Plaster);
-        world.set(cx + dx, gy + 3, cz, Block::Plaster);
-        world.set(cx + dx, gy + 4, cz, Block::RoofTile);
+        wall_column(world, cx + dx, gy, cz, None);
     }
 }
 
@@ -476,13 +516,15 @@ fn place_residence(
     bz: i32,
     ridged: bool,
 ) {
-    const BODY_H: i32 = 4;
+    const BODY_H: i32 = s(4);
+    /// How far the 기단 projects past the walls.
+    const APRON: i32 = s(2);
 
     // 기단 — the platform, projecting a little past the walls all round.
-    for dz in -(bz + 2)..=(bz + 2) {
-        for dx in -(bx + 2)..=(bx + 2) {
+    for dz in -(bz + APRON)..=(bz + APRON) {
+        for dx in -(bx + APRON)..=(bx + APRON) {
             world.set(cx + dx, gy + 1, cz + dz, Block::Granite);
-            for h in 2..=(BODY_H + 8) {
+            for h in 2..=(BODY_H + s(8)) {
                 world.set(cx + dx, gy + h, cz + dz, Block::Air);
             }
         }
@@ -499,8 +541,8 @@ fn place_residence(
                 }
                 let corner = dx.abs() == bx && dz.abs() == bz;
                 let post = corner
-                    || (dx.rem_euclid(3) == 0 && dz.abs() == bz)
-                    || (dz.rem_euclid(3) == 0 && dx.abs() == bx);
+                    || (dx.rem_euclid(BAY) == 0 && dz.abs() == bz)
+                    || (dz.rem_euclid(BAY) == 0 && dx.abs() == bx);
                 let block = if post {
                     Block::RedPillar
                 } else if dz == bz {
@@ -513,7 +555,7 @@ fn place_residence(
         }
     }
     // A doorway through the front.
-    for h in 0..3 {
+    for h in 0..DOOR_H {
         for dx in -1..=1 {
             world.set(cx + dx, floor + h, cz + bz, Block::Air);
         }
@@ -527,13 +569,13 @@ fn place_residence(
             }
         }
     }
-    lay_roof(world, cx, cz, bx, bz, beam + 1, 2, PALACE_STEP, ridged);
+    lay_roof(world, cx, cz, bx, bz, beam + 1, EAVES, PALACE_STEP, ridged);
 
     // 드므 — the bronze vats that stood at a hall's corners, kept full of water
     // as a charm against fire.
     for sx in [-1, 1] {
         for sz in [-1, 1] {
-            let (x, z) = (cx + sx * (bx + 2), cz + sz * (bz + 2));
+            let (x, z) = (cx + sx * (bx + APRON), cz + sz * (bz + APRON));
             world.set(x, gy + 2, z, Block::Granite);
             world.set(x, gy + 3, z, Block::Water);
         }
@@ -543,7 +585,7 @@ fn place_residence(
 // --- 회랑 (the cloister) ----------------------------------------------------
 
 /// Height of the cloister's colonnade, from its raised floor to the beam.
-const CLOISTER_H: i32 = 3;
+const CLOISTER_H: i32 = s(3);
 
 /// Run 회랑 around all four sides of the court.
 fn lay_cloister(world: &mut World, cx: i32, cz: i32, gy: i32) {
@@ -575,22 +617,26 @@ fn cloister_run(
         }
     };
 
+    // Half-width of the walkway. The runs are laid on the court boundary, so
+    // this is also how far the cloister reaches either side of it.
+    const HALF_W: i32 = s(1) + 1;
+
     for t in -half_len..=half_len {
-        // A raised granite walkway, three wide, centred on the court boundary.
-        for w in -1..=1 {
+        // A raised granite walkway centred on the court boundary.
+        for w in -HALF_W..=HALF_W {
             let (x, z) = at(t, w);
             world.set(x, gy + 1, z, Block::Granite);
-            for h in 2..=(CLOISTER_H + 5) {
+            for h in 2..=(CLOISTER_H + s(5)) {
                 world.set(x, gy + h, z, Block::Air);
             }
         }
 
-        // Posts every third bay. The outer face is walled between them; the
-        // court face is left open, which is what makes it a colonnade and not a
+        // Posts every bay. The outer face is walled between them; the court
+        // face is left open, which is what makes it a colonnade and not a
         // corridor you cannot see out of.
-        let post = t.rem_euclid(3) == 0;
+        let post = t.rem_euclid(BAY) == 0;
         for h in 2..=(CLOISTER_H + 1) {
-            let (ox, oz) = at(t, -inward);
+            let (ox, oz) = at(t, -inward * HALF_W);
             world.set(
                 ox,
                 gy + h,
@@ -598,36 +644,41 @@ fn cloister_run(
                 if post { Block::RedPillar } else { Block::Plaster },
             );
             if post {
-                let (ix, iz) = at(t, inward);
+                let (ix, iz) = at(t, inward * HALF_W);
                 world.set(ix, gy + h, iz, Block::RedPillar);
             }
         }
 
         // Painted beam over both faces.
         let beam = gy + CLOISTER_H + 2;
-        for w in [-1, 1] {
+        for w in [-HALF_W, HALF_W] {
             let (x, z) = at(t, w);
             world.set(x, beam, z, Block::Dancheong);
         }
     }
 
     // One roof over the whole run. Half-extents are in world space, so they swap
-    // with the run's direction.
-    let (bx, bz) = if along_x { (half_len, 1) } else { (1, half_len) };
+    // with the run's direction. The pitch stays at 1 — a corridor this narrow
+    // would be capped in a single course at the palace step of 2.
+    let (bx, bz) = if along_x {
+        (half_len, HALF_W)
+    } else {
+        (HALF_W, half_len)
+    };
     lay_roof(world, cx, cz, bx, bz, gy + CLOISTER_H + 3, 1, 1, true);
 }
 
 /// 근정문 — the inner gate in the south side of the court, on the axis between
 /// 광화문 and the throne hall.
 fn place_inner_gate(world: &mut World, cx: i32, cz: i32, gy: i32) {
-    const GX: i32 = 7;
-    const GZ: i32 = 2;
-    const BODY_H: i32 = 4;
+    const GX: i32 = s(7);
+    const GZ: i32 = s(2);
+    const BODY_H: i32 = s(4);
 
     for dz in -GZ..=GZ {
         for dx in -GX..=GX {
             world.set(cx + dx, gy + 1, cz + dz, Block::Granite);
-            for h in 2..=(BODY_H + 6) {
+            for h in 2..=(BODY_H + s(6)) {
                 world.set(cx + dx, gy + h, cz + dz, Block::Air);
             }
         }
@@ -643,12 +694,14 @@ fn place_inner_gate(world: &mut World, cx: i32, cz: i32, gy: i32) {
                 }
                 // Three doorways in each face: the king's in the centre, an
                 // officials' door either side.
-                let doorway = dz.abs() == GZ && h < 3 && (dx.abs() <= 1 || (4..=5).contains(&dx.abs()));
+                let doorway = dz.abs() == GZ
+                    && h < DOOR_H
+                    && (dx.abs() <= s(1) || (s(4)..=s(5)).contains(&dx.abs()));
                 if doorway {
                     world.set(cx + dx, y, cz + dz, Block::Air);
                     continue;
                 }
-                let post = dx.rem_euclid(3) == 0 || (dx.abs() == GX && dz.abs() == GZ);
+                let post = dx.rem_euclid(BAY) == 0 || (dx.abs() == GX && dz.abs() == GZ);
                 world.set(
                     cx + dx,
                     y,
@@ -667,18 +720,18 @@ fn place_inner_gate(world: &mut World, cx: i32, cz: i32, gy: i32) {
             }
         }
     }
-    lay_roof(world, cx, cz, GX, GZ, beam + 1, 2, PALACE_STEP, true);
+    lay_roof(world, cx, cz, GX, GZ, beam + 1, EAVES, PALACE_STEP, true);
 }
 
 /// 품계석 — the ranked stones officials lined up beside, in two rows down the
 /// court flanking the 삼도.
 fn place_rank_stones(world: &mut World, cx: i32, cz: i32, gy: i32) {
-    let mut z = cz + COURT_Z - 5;
-    while z > cz - COURT_Z + 8 {
-        for dx in [-5, 5] {
+    let mut z = cz + COURT_Z - s(5);
+    while z > cz - COURT_Z + s(8) {
+        for dx in [-s(5), s(5)] {
             world.set(cx + dx, gy + 1, z, Block::Granite);
         }
-        z -= 3;
+        z -= s(3);
     }
 }
 
@@ -693,12 +746,12 @@ fn place_gyeonghoeru(world: &mut World, cx: i32, cz: i32, gy: i32) {
     // The pond has to fit the strip between the court's west cloister and the
     // precinct wall — about sixteen blocks — so it is long north-to-south rather
     // than square.
-    const POND_X: i32 = 7;
-    const POND_Z: i32 = 12;
-    const DEPTH: i32 = 2;
+    const POND_X: i32 = s(7);
+    const POND_Z: i32 = s(12);
+    const DEPTH: i32 = s(2);
     /// Half-extents of the pavilion's stone understructure.
-    const BASE_X: i32 = 4;
-    const BASE_Z: i32 = 4;
+    const BASE_X: i32 = s(4);
+    const BASE_Z: i32 = s(4);
 
     // Excavate, then flood to a hair below the bank so the water reads as a
     // pond rather than as a flooded courtyard.
@@ -730,18 +783,18 @@ fn place_gyeonghoeru(world: &mut World, cx: i32, cz: i32, gy: i32) {
     }
 
     // Timber deck across the top of them.
-    let floor = gy + 3;
+    let floor = gy + DEPTH + 1;
     for dz in -BASE_Z..=BASE_Z {
         for dx in -BASE_X..=BASE_X {
             world.set(cx + dx, floor, cz + dz, Block::Wood);
-            for h in 1..=8 {
+            for h in 1..=s(8) {
                 world.set(cx + dx, floor + h, cz + dz, Block::Air);
             }
         }
     }
 
     // Open colonnade: columns only, no infill.
-    for h in 1..=3 {
+    for h in 1..=s(3) {
         for dz in -BASE_Z..=BASE_Z {
             for dx in -BASE_X..=BASE_X {
                 let edge = dx.abs() == BASE_X || dz.abs() == BASE_Z;
@@ -751,7 +804,7 @@ fn place_gyeonghoeru(world: &mut World, cx: i32, cz: i32, gy: i32) {
             }
         }
     }
-    let beam = floor + 4;
+    let beam = floor + s(4);
     for dz in -BASE_Z..=BASE_Z {
         for dx in -BASE_X..=BASE_X {
             if dx.abs() == BASE_X || dz.abs() == BASE_Z {
@@ -759,14 +812,14 @@ fn place_gyeonghoeru(world: &mut World, cx: i32, cz: i32, gy: i32) {
             }
         }
     }
-    lay_roof(world, cx, cz, BASE_X, BASE_Z, beam + 1, 2, PALACE_STEP, true);
+    lay_roof(world, cx, cz, BASE_X, BASE_Z, beam + 1, EAVES, PALACE_STEP, true);
 
     // A causeway east to the bank, at deck height. It starts *beyond* the
     // pavilion's own edge: running it from `BASE_X` cleared the colonnade and
     // deck it was supposed to join, leaving the pavilion open on that side.
     for dx in (BASE_X + 1)..=POND_X {
         world.set(cx + dx, floor, cz, Block::Granite);
-        for h in 1..=4 {
+        for h in 1..=s(4) {
             world.set(cx + dx, floor + h, cz, Block::Air);
         }
     }
@@ -780,14 +833,14 @@ fn place_gyeonghoeru(world: &mut World, cx: i32, cz: i32, gy: i32) {
 /// platform; paving the whole precinct made it read as one enormous parade
 /// ground rather than a sequence of separate courts.
 fn lay_courtyard(world: &mut World, cx: i32, cz: i32, gy: i32) {
-    let paved_north = COURT_OFFSET_Z - COURT_Z - 2;
+    let paved_north = COURT_OFFSET_Z - COURT_Z - s(2);
     for dz in paved_north..=PALACE_SOUTH {
         for dx in -PALACE_X..=PALACE_X {
             world.set(cx + dx, gy, cz + dz, Block::Granite);
         }
     }
-    for dz in (COURT_OFFSET_Z - 2)..=PALACE_SOUTH {
-        for dx in -3..=3 {
+    for dz in (COURT_OFFSET_Z - s(2))..=PALACE_SOUTH {
+        for dx in -s(3)..=s(3) {
             // The centre lane sits a block proud of the two flanking it.
             let block = if dx == 0 { Block::Granite } else { Block::Stone };
             world.set(cx + dx, gy, cz + dz, block);
@@ -809,13 +862,10 @@ fn build_wall(world: &mut World, cx: i32, cz: i32, gy: i32) {
                 continue;
             }
             // Leave the gateway clear.
-            if dz == PALACE_SOUTH && dx.abs() <= 7 {
+            if dz == PALACE_SOUTH && dx.abs() <= s(7) {
                 continue;
             }
-            world.set(cx + dx, gy + 1, cz + dz, Block::Granite);
-            world.set(cx + dx, gy + 2, cz + dz, Block::Plaster);
-            world.set(cx + dx, gy + 3, cz + dz, Block::Plaster);
-            world.set(cx + dx, gy + 4, cz + dz, Block::RoofTile);
+            wall_column(world, cx + dx, gy, cz + dz, None);
         }
     }
 }
@@ -823,9 +873,9 @@ fn build_wall(world: &mut World, cx: i32, cz: i32, gy: i32) {
 /// 광화문 — the main gate: a granite base pierced by three arched passages,
 /// carrying a painted timber storey and a tiled roof.
 fn place_gate(world: &mut World, cx: i32, cz: i32, gy: i32) {
-    const GX: i32 = 8; // half-width
-    const GZ: i32 = 3; // half-depth
-    const BASE_H: i32 = 5;
+    const GX: i32 = s(8); // half-width
+    const GZ: i32 = s(3); // half-depth
+    const BASE_H: i32 = s(5);
 
     for dz in -GZ..=GZ {
         for dx in -GX..=GX {
@@ -836,9 +886,9 @@ fn place_gate(world: &mut World, cx: i32, cz: i32, gy: i32) {
     }
 
     // Three passages through the base. The middle one — the king's — is taller.
-    for (centre, height) in [(-5i32, 3i32), (0, 4), (5, 3)] {
+    for (centre, height) in [(-s(5), s(3)), (0, s(4)), (s(5), s(3))] {
         for dz in -GZ..=GZ {
-            for dx in -1i32..=1 {
+            for dx in -s(1)..=s(1) {
                 for h in 1..=height {
                     // Round the top off so the opening reads as an arch.
                     if h == height && dx.abs() == 1 {
@@ -852,14 +902,15 @@ fn place_gate(world: &mut World, cx: i32, cz: i32, gy: i32) {
 
     // The painted storey above: red columns, dancheong beams, paper infill.
     let floor = gy + BASE_H + 1;
-    for h in 0..3 {
+    const STOREY_H: i32 = s(3);
+    for h in 0..STOREY_H {
         let y = floor + h;
         for dz in -GZ..=GZ {
             for dx in -GX..=GX {
                 if dx.abs() != GX && dz.abs() != GZ {
                     continue;
                 }
-                let post = dx.rem_euclid(4) == 0 || dz.abs() == GZ && dx.abs() == GX;
+                let post = dx.rem_euclid(s(4)) == 0 || dz.abs() == GZ && dx.abs() == GX;
                 world.set(
                     cx + dx,
                     y,
@@ -869,7 +920,7 @@ fn place_gate(world: &mut World, cx: i32, cz: i32, gy: i32) {
             }
         }
     }
-    let beam = floor + 3;
+    let beam = floor + STOREY_H;
     for dz in -GZ..=GZ {
         for dx in -GX..=GX {
             if dx.abs() == GX || dz.abs() == GZ {
@@ -877,7 +928,7 @@ fn place_gate(world: &mut World, cx: i32, cz: i32, gy: i32) {
             }
         }
     }
-    lay_roof(world, cx, cz, GX, GZ, beam + 1, 2, PALACE_STEP, true);
+    lay_roof(world, cx, cz, GX, GZ, beam + 1, EAVES, PALACE_STEP, true);
 }
 
 /// 근정전 — the throne hall, on two granite 월대 terraces, with the double roof
@@ -890,19 +941,19 @@ fn place_throne_hall(world: &mut World, cx: i32, cz: i32, gy: i32) {
 
     let floor = gy + 3;
     // Lower storey: a colonnade of red pillars with plaster and paper between.
-    hall_storey(world, cx, cz, 9, 6, floor, 4);
-    lay_hall_floor(world, cx, cz, 9, 6, floor - 1);
-    place_throne(world, cx, cz - 2, floor);
-    let lower_beam = floor + 4;
-    lay_roof(world, cx, cz, 9, 6, lower_beam + 1, 2, PALACE_STEP, true);
+    hall_storey(world, cx, cz, s(9), s(6), floor, s(4));
+    lay_hall_floor(world, cx, cz, s(9), s(6), floor - 1);
+    place_throne(world, cx, cz - s(2), floor);
+    let lower_beam = floor + s(4);
+    lay_roof(world, cx, cz, s(9), s(6), lower_beam + 1, EAVES, PALACE_STEP, true);
 
     // Upper storey rising through the lower roof — the 중층 that makes 근정전
     // read as a throne hall rather than a large shed. It starts above the lower
     // roof's first two courses so it emerges from them instead of being buried.
-    let upper_floor = lower_beam + 4;
-    hall_storey(world, cx, cz, 6, 4, upper_floor, 3);
-    let upper_beam = upper_floor + 3;
-    lay_roof(world, cx, cz, 6, 4, upper_beam + 1, 2, PALACE_STEP, true);
+    let upper_floor = lower_beam + s(4);
+    hall_storey(world, cx, cz, s(6), s(4), upper_floor, s(3));
+    let upper_beam = upper_floor + s(3);
+    lay_roof(world, cx, cz, s(6), s(4), upper_beam + 1, EAVES, PALACE_STEP, true);
 }
 
 /// 어좌 — the throne, on its dais at the north end of the hall, under a 닫집
@@ -913,42 +964,42 @@ fn place_throne_hall(world: &mut World, cx: i32, cz: i32, gy: i32) {
 /// is what the whole axis points at.
 fn place_throne(world: &mut World, cx: i32, cz: i32, floor: i32) {
     // The dais, stepping up twice.
-    for dz in -2..=1 {
-        for dx in -3..=3 {
+    for dz in -s(2)..=s(1) {
+        for dx in -s(3)..=s(3) {
             world.set(cx + dx, floor, cz + dz, Block::Granite);
         }
     }
-    for dz in -2..=0 {
-        for dx in -2..=2 {
+    for dz in -s(2)..=0 {
+        for dx in -s(2)..=s(2) {
             world.set(cx + dx, floor + 1, cz + dz, Block::Granite);
         }
     }
-    world.set(cx, floor + 2, cz - 1, Block::RedPillar); // the seat
+    world.set(cx, floor + 2, cz - s(1), Block::RedPillar); // the seat
 
     // 일월오봉도 — the sun, moon and five peaks, which stood behind the throne
     // wherever the king sat. The painting itself is far below this resolution;
     // what carries is a band of colour filling the wall right behind the seat.
-    for dx in -3..=3 {
-        for h in 2..=4 {
-            world.set(cx + dx, floor + h, cz - 3, Block::Dancheong);
+    for dx in -s(3)..=s(3) {
+        for h in 2..=s(4) {
+            world.set(cx + dx, floor + h, cz - s(3), Block::Dancheong);
         }
     }
 
     // 닫집 — the canopy, on four posts over the seat.
-    for sx in [-2, 2] {
-        for sz in [-2, 1] {
-            for h in 3..=4 {
+    for sx in [-s(2), s(2)] {
+        for sz in [-s(2), s(1)] {
+            for h in 3..=s(4) {
                 world.set(cx + sx, floor + h, cz + sz, Block::RedPillar);
             }
         }
     }
-    for dz in -2..=1 {
-        for dx in -2..=2 {
-            world.set(cx + dx, floor + 5, cz + dz, Block::RoofTile);
+    for dz in -s(2)..=s(1) {
+        for dx in -s(2)..=s(2) {
+            world.set(cx + dx, floor + s(4) + 1, cz + dz, Block::RoofTile);
         }
     }
     for dx in -1..=1 {
-        world.set(cx + dx, floor + 6, cz, Block::RoofRidge);
+        world.set(cx + dx, floor + s(4) + 2, cz, Block::RoofRidge);
     }
 }
 
@@ -972,8 +1023,8 @@ fn hall_storey(world: &mut World, cx: i32, cz: i32, bx: i32, bz: i32, floor: i32
                 }
                 // Columns every third bay, and at every corner.
                 let corner = dx.abs() == bx && dz.abs() == bz;
-                let bay = dx.rem_euclid(3) == 0 && dz.abs() == bz
-                    || dz.rem_euclid(3) == 0 && dx.abs() == bx;
+                let bay = dx.rem_euclid(BAY) == 0 && dz.abs() == bz
+                    || dz.rem_euclid(BAY) == 0 && dx.abs() == bx;
                 let block = if corner || bay {
                     Block::RedPillar
                 } else if dz == bz {
@@ -986,7 +1037,7 @@ fn hall_storey(world: &mut World, cx: i32, cz: i32, bx: i32, bz: i32, floor: i32
         }
     }
     // Doorway through the front.
-    for h in 0..3.min(height) {
+    for h in 0..DOOR_H.min(height) {
         for dx in -1..=1 {
             world.set(cx + dx, floor + h, cz + bz, Block::Air);
         }
@@ -1004,7 +1055,7 @@ fn hall_storey(world: &mut World, cx: i32, cz: i32, bx: i32, bz: i32, floor: i32
 #[cfg(test)]
 mod checks {
     use super::*;
-    use crate::world::WORLD_Y;
+    use crate::world::{PLAY_MARGIN, WORLD_Y};
 
     /// 무량각 — the king's and queen's halls were built deliberately *without* a
     /// ridge beam, while 사정전 immediately south of them keeps one. It is a
@@ -1059,21 +1110,26 @@ mod checks {
     fn the_throne_hall_has_a_throne() {
         let w = generate(1);
         let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
-        let hz = cz + COURT_OFFSET_Z - 2;
+        // Walk the same chain of offsets the builders use, rather than the
+        // absolute numbers they happened to produce at the original scale:
+        // the court, then the hall set back inside it, then the throne set
+        // back inside that.
+        let hz = cz + COURT_OFFSET_Z - s(2);
+        let tz = hz - s(2);
         let floor = GROUND + 3;
         assert_eq!(
-            w.get(cx, floor + 2, hz - 3),
+            w.get(cx, floor + 2, tz - s(1)),
             Block::RedPillar,
             "the throne seat is missing"
         );
         // 일월오봉도 stands behind it, and the 닫집 hangs over it.
         assert_eq!(
-            w.get(cx, floor + 3, hz - 5),
+            w.get(cx, floor + 3, tz - s(3)),
             Block::Dancheong,
             "the 일월오봉도 screen is missing"
         );
         assert_eq!(
-            w.get(cx, floor + 6, hz - 2),
+            w.get(cx, floor + s(4) + 2, tz),
             Block::RoofRidge,
             "the 닫집 canopy is missing"
         );
@@ -1130,6 +1186,48 @@ mod checks {
         }
         assert_eq!(leaves, 0, "trees were planted on the Joseon map");
         assert_eq!(plants, 0, "grass or flowers were scattered on the Joseon map");
+    }
+
+    /// Nothing may touch the ceiling or the edge of the playable area.
+    ///
+    /// This is the check that scaling the palace needs. `World::set` silently
+    /// drops out-of-bounds writes, so a roof that outgrew the world does not
+    /// fail or warn — it comes out neatly sliced off, and every other test here
+    /// still passes because the building is undeniably standing.
+    #[test]
+    fn the_palace_fits_in_the_world() {
+        let w = generate(1337);
+        let (cx, cz) = (WORLD_X / 2, WORLD_Z / 2);
+
+        let mut highest = 0;
+        for z in 0..WORLD_Z {
+            for x in 0..WORLD_X {
+                for y in (0..WORLD_Y).rev() {
+                    if w.get(x, y, z) != Block::Air {
+                        highest = highest.max(y);
+                        break;
+                    }
+                }
+            }
+        }
+        assert!(
+            highest < WORLD_Y - 1,
+            "something reaches the world ceiling at y={highest}; a roof is being clipped"
+        );
+
+        // The precinct, eaves and all, has to sit inside the walkable area —
+        // otherwise the far side of the palace is behind the invisible wall.
+        for (name, v, limit) in [
+            ("west", cx - PALACE_X, PLAY_MARGIN),
+            ("east", WORLD_X - (cx + PALACE_X), PLAY_MARGIN),
+            ("north", cz - PALACE_NORTH, PLAY_MARGIN),
+            ("south", WORLD_Z - (cz + PALACE_SOUTH), PLAY_MARGIN),
+        ] {
+            assert!(
+                v > limit,
+                "the {name} wall is {v} from the map edge, inside the {limit}-block margin"
+            );
+        }
     }
 
     fn count_in(w: &World, cx: i32, cz: i32, rx: i32, rz: i32, block: Block) -> u32 {
