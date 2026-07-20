@@ -18,7 +18,9 @@
 //!              │  품계석 ∙ ∙  │
 //!              └──── 근정문 ──┘
 //!                      │  삼도 (the raised processional way)
-//!                   광화문   (main gate, in the south wall)
+//!                    영제교   (over 금천, the stream across the approach)
+//!                    흥례문
+//!                    광화문   (main gate, in the south wall)
 //! ```
 //!
 //! Inside 근정전, at the head of that axis, stands the 어좌 under its 닫집 canopy
@@ -198,10 +200,15 @@ fn place_palace(world: &mut World, gy: i32) {
     // round. Built in that order so the cloister's corners overwrite the ends of
     // the gate rather than the other way about.
     let court_z = cz + COURT_OFFSET_Z;
+    // The outer approach: 흥례문 partway up it, then 금천 and 영제교 in the
+    // stretch between that gate and 근정문 — gate, water, gate, as you meet them.
+    place_timber_gate(world, cx, cz + HEUNGNYE_Z, gy, s(8), s(2));
+    lay_geumcheon(world, cx, cz + GEUMCHEON_Z, gy);
+
     place_rank_stones(world, cx, court_z, gy);
     place_throne_hall(world, cx, court_z - s(2), gy);
     lay_cloister(world, cx, court_z, gy);
-    place_inner_gate(world, cx, court_z + COURT_Z, gy);
+    place_timber_gate(world, cx, court_z + COURT_Z, gy, s(7), s(2));
 
     // 침전 — the halls the court actually lived in, running north behind the
     // throne hall, each in its own walled yard.
@@ -756,15 +763,78 @@ fn cloister_run(
     lay_roof(world, cx, cz, bx, bz, gy + CLOISTER_H + 3, 1, 1, true);
 }
 
-/// 근정문 — the inner gate in the south side of the court, on the axis between
-/// 광화문 and the throne hall.
-fn place_inner_gate(world: &mut World, cx: i32, cz: i32, gy: i32) {
-    const GX: i32 = s(7);
-    const GZ: i32 = s(2);
+// --- 흥례문 권역 (the outer approach) ---------------------------------------
+
+/// 흥례문, midway up the approach, and 금천 with 영제교 over it just inside.
+const HEUNGNYE_Z: i32 = s(20);
+const GEUMCHEON_Z: i32 = s(12);
+
+/// 금천 — the stream every Joseon palace puts across its entrance, and 영제교,
+/// the stone bridge that carries the axis over it.
+///
+/// It is not decoration. You were meant to cross running water on the way in,
+/// and the approach from 광화문 was 42 blocks of unbroken paving before this:
+/// the eye had nothing to stop on between the outer gate and 근정문, which is
+/// exactly what the real sequence of gate, water, bridge, gate exists to
+/// prevent.
+///
+/// The channel is cut *below* the pavement rather than flooded to it, so the
+/// water reads as a ditch you cross rather than as a puddle on the courtyard.
+fn lay_geumcheon(world: &mut World, cx: i32, cz: i32, gy: i32) {
+    /// Half-width of the water, and of the dressed stone kerb either side.
+    const CHANNEL: i32 = s(2);
+    const DEPTH: i32 = s(2);
+    /// Half-width of the bridge deck — wider than the 삼도 it carries, so the
+    /// processional way crosses without pinching.
+    const DECK: i32 = s(4);
+
+    for dz in -(CHANNEL + 1)..=(CHANNEL + 1) {
+        for dx in -(PALACE_X - 1)..=(PALACE_X - 1) {
+            let (x, z) = (cx + dx, cz + dz);
+            if dz.abs() > CHANNEL {
+                world.set(x, gy, z, Block::Granite); // the kerb
+                continue;
+            }
+            // Cut the channel: open at pavement level, water below it. The
+            // clearing has to reach *above* the pavement as well, because the
+            // 삼도's centre lane stands a block proud and the courtyard is
+            // already laid by the time this runs — leave it and the
+            // processional way carries on straight over the water as a
+            // one-block ribbon of granite with nothing holding it up.
+            for h in 0..=1 {
+                world.set(x, gy + h, z, Block::Air);
+            }
+            for d in 1..=DEPTH {
+                world.set(x, gy - d, z, Block::Water);
+            }
+            world.set(x, gy - DEPTH - 1, z, Block::Granite); // dressed bed
+        }
+    }
+
+    // 영제교 — the deck, level with the pavement either side so the crossing is
+    // continuous, with the raised centre lane of the 삼도 carried over it.
+    for dz in -(CHANNEL + 1)..=(CHANNEL + 1) {
+        for dx in -DECK..=DECK {
+            world.set(cx + dx, gy, cz + dz, Block::Granite);
+            if dx == 0 {
+                world.set(cx + dx, gy + 1, cz + dz, Block::Granite);
+            }
+        }
+    }
+}
+
+/// A timber gate on the axis: a granite sill carrying a red-pillared storey
+/// with three doorways in each face, under its own bracketed roof.
+///
+/// Both 근정문 and 흥례문 are this building at different sizes, so it takes its
+/// half-extents rather than fixing them. 광화문 is *not* — it is a fortified
+/// stone base with passages cut through it, which is why `place_gate` builds
+/// something else entirely.
+fn place_timber_gate(world: &mut World, cx: i32, cz: i32, gy: i32, gx: i32, gz: i32) {
     const BODY_H: i32 = s(4);
 
-    for dz in -GZ..=GZ {
-        for dx in -GX..=GX {
+    for dz in -gz..=gz {
+        for dx in -gx..=gx {
             world.set(cx + dx, gy + 1, cz + dz, Block::Granite);
             for h in 2..=(BODY_H + s(6)) {
                 world.set(cx + dx, gy + h, cz + dz, Block::Air);
@@ -775,21 +845,21 @@ fn place_inner_gate(world: &mut World, cx: i32, cz: i32, gy: i32) {
     let floor = gy + 2;
     for h in 0..BODY_H {
         let y = floor + h;
-        for dz in -GZ..=GZ {
-            for dx in -GX..=GX {
-                if dx.abs() != GX && dz.abs() != GZ {
+        for dz in -gz..=gz {
+            for dx in -gx..=gx {
+                if dx.abs() != gx && dz.abs() != gz {
                     continue; // the passage through the middle stays open
                 }
                 // Three doorways in each face: the king's in the centre, an
                 // officials' door either side.
-                let doorway = dz.abs() == GZ
+                let doorway = dz.abs() == gz
                     && h < DOOR_H
                     && (dx.abs() <= s(1) || (s(4)..=s(5)).contains(&dx.abs()));
                 if doorway {
                     world.set(cx + dx, y, cz + dz, Block::Air);
                     continue;
                 }
-                let post = dx.rem_euclid(BAY) == 0 || (dx.abs() == GX && dz.abs() == GZ);
+                let post = dx.rem_euclid(BAY) == 0 || (dx.abs() == gx && dz.abs() == gz);
                 world.set(
                     cx + dx,
                     y,
@@ -801,15 +871,15 @@ fn place_inner_gate(world: &mut World, cx: i32, cz: i32, gy: i32) {
     }
 
     let beam = floor + BODY_H;
-    for dz in -GZ..=GZ {
-        for dx in -GX..=GX {
-            if dx.abs() == GX || dz.abs() == GZ {
+    for dz in -gz..=gz {
+        for dx in -gx..=gx {
+            if dx.abs() == gx || dz.abs() == gz {
                 world.set(cx + dx, beam, cz + dz, Block::Dancheong);
             }
         }
     }
-    let eave = lay_brackets(world, cx, cz, GX, GZ, beam + 1);
-    lay_roof(world, cx, cz, GX, GZ, eave, EAVES, PALACE_STEP, true);
+    let eave = lay_brackets(world, cx, cz, gx, gz, beam + 1);
+    lay_roof(world, cx, cz, gx, gz, eave, EAVES, PALACE_STEP, true);
 }
 
 /// 품계석 — the ranked stones officials lined up beside, in two rows down the
